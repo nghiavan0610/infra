@@ -1,0 +1,163 @@
+# NATS Authentication Configuration Template
+# This file is processed by envsubst to generate auth.conf
+
+# Account Definitions
+accounts {
+    # System account for NATS management and monitoring
+    SYS: {
+        users: [
+            {
+                user: "${SYS_USER}"
+                password: "${SYS_PASS}"
+            },
+            # NATS Surveyor monitoring user
+            {
+                user: "${SURVEYOR_USER}"
+                password: "${SURVEYOR_PASS}"
+                permissions = {
+                    publish = ["$$SYS.REQ.>"]
+                    subscribe = ["$$SYS.>"]
+                }
+            }
+        ]
+    }
+    
+    # Main application account with service-specific permissions
+    BRANDMATE: {
+        users: [
+            # Teacher Service
+            {
+                user: "${TEACHER_SERVICE_USER}"
+                password: "${TEACHER_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "teacher.*",
+                        "events.teacher.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "user.query.*",
+                        "course.query.*", 
+                        "events.user.*",
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+            
+            # User Service
+            {
+                user: "${USER_SERVICE_USER}"
+                password: "${USER_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "user.*",
+                        "events.user.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "teacher.query.*",
+                        "course.query.*",
+                        "events.teacher.*", 
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+
+            # Class Service
+            {
+                user: "${CLASS_SERVICE_USER}"
+                password: "${CLASS_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "class.*",
+                        "events.class.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "teacher.query.*",
+                        "course.query.*",
+                        "events.teacher.*", 
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+
+            # Search Service
+            {
+                user: "${SEARCH_SERVICE_USER}"
+                password: "${SEARCH_SERVICE_PASS}"
+                permissions = {
+                    publish = []
+                    subscribe = [
+                        "events.user.*", 
+                        "events.teacher.*", 
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+
+            # Notification Service
+            {
+                user: "${NOTIFICATION_SERVICE_USER}"
+                password: "${NOTIFICATION_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "notifications.email.*",
+                        "notifications.sms.*",
+                        "notifications.push.*"
+                    ]
+                    subscribe = [
+                        "notifications.*",
+                        "events.*"
+                    ]
+                }
+            }
+        ]
+        
+        # JetStream configuration for BRANDMATE account
+        jetstream: {
+            max_memory: ${NATS_MAX_MEMORY}
+            max_store: ${NATS_MAX_FILE}
+            max_streams: 100
+            max_consumers: 1000
+        }
+    }
+
+    MONEA: {
+        users: [
+            {
+                user: "${MONEA_SERVICE_USER}"
+                password: "${MONEA_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "teacher.*",
+                        "events.teacher.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "user.query.*",
+                        "course.query.*", 
+                        "events.user.*",
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            }
+        ]
+        
+        # JetStream configuration for BRANDMATE account
+        jetstream: {
+            max_memory: ${NATS_MAX_MEMORY}
+            max_store: ${NATS_MAX_FILE}
+            max_streams: 100
+            max_consumers: 1000
+        }
+    }
+}
+
+# System account for monitoring and management
+system_account: "SYS"

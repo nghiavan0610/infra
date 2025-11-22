@@ -1,0 +1,60 @@
+# docker-compose up --detach --scale postgresql-master=1 --scale postgresql-slave=3
+
+services:
+  postgres-master:
+    image: bitnami/postgresql:17
+    container_name: postgres-master
+    env_file:
+      - .env
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=master
+      - POSTGRESQL_POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
+      - POSTGRESQL_USERNAME=${POSTGRES_USERNAME}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE}
+      - POSTGRESQL_REPLICATION_USER=${POSTGRES_REPLICATION_USERNAME}
+      - POSTGRESQL_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+
+      # Enable TLS
+      # - POSTGRESQL_ENABLE_TLS=yes
+      # - POSTGRESQL_TLS_CERT_FILE=/opt/bitnami/postgresql/certs/postgres.crt
+      # - POSTGRESQL_TLS_KEY_FILE=/opt/bitnami/postgresql/certs/postgres.key
+      # - POSTGRESQL_TLS_CA_FILE=/opt/bitnami/postgresql/certs/ca.pem
+    volumes:
+      - ./persistence:/bitnami/postgresql
+      - ./config/master-conf/postgresql.conf:/bitnami/postgresql/conf/postgresql.conf
+      - ./config/pg_hba.conf:/opt/bitnami/postgresql/conf/pg_hba.conf
+      # - ./certs:/opt/bitnami/postgresql/certs
+    ports:
+      - ${POSTGRES_MASTER_PORT}:5432
+    networks:
+      - postgres-network
+
+  postgres-slave:
+    image: bitnami/postgresql:17
+    container_name: postgres-slave
+    env_file:
+      - .env
+    environment:
+      - POSTGRESQL_REPLICATION_MODE=slave
+      - POSTGRESQL_POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
+      - POSTGRESQL_MASTER_HOST=postgres-master
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+      - POSTGRESQL_USERNAME=${POSTGRES_USERNAME}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE}
+      - POSTGRESQL_REPLICATION_USER=${POSTGRES_REPLICATION_USERNAME}
+      - POSTGRESQL_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+    ports:
+      - ${POSTGRES_SLAVE_PORT}:5432
+    depends_on:
+      - postgres-master
+    volumes:
+      - ./config/slave-conf/postgresql.conf:/bitnami/postgresql/conf/postgresql.conf
+      - ./config/pg_hba.conf:/opt/bitnami/postgresql/conf/pg_hba.conf
+    networks:
+      - postgres-network
+
+networks:
+  postgres-network:
+    driver: bridge

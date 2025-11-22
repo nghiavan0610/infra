@@ -1,0 +1,103 @@
+# OpenTelemetry Collector Configuration
+# Receives telemetry from your FastAPI app and exports to backends
+
+receivers:
+  # OTLP receiver for traces, metrics, and logs
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  # Prometheus receiver to scrape your FastAPI /metrics endpoint
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'fastapi-app'
+          scrape_interval: 15s
+          static_configs:
+            - targets: ['host.docker.internal:5001']  # Your FastAPI app
+              labels:
+                service: 'monea-ai'
+
+processors:
+  # Batch processor - groups data before sending to reduce network calls
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+  # Memory limiter - prevents OOM
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+  # Resource processor - adds additional attributes
+  resource:
+    attributes:
+      - key: deployment.environment
+        value: local
+        action: insert
+
+  # Attributes processor - modify span/metric/log attributes
+  attributes:
+    actions:
+      - key: http.user_agent
+        action: delete  # Remove PII
+
+exporters:
+  # Jaeger exporter for traces
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+
+  # Tempo exporter for traces (alternative/additional)
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  # Prometheus exporter for metrics
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+  # Loki exporter for logs
+  loki:
+    endpoint: http://loki:3100/loki/api/v1/push
+    tls:
+      insecure: true
+
+  # Logging exporter for debugging (outputs to collector's stdout)
+  logging:
+    loglevel: info
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1777
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  extensions: [health_check, pprof, zpages]
+  
+  pipelines:
+    # Traces pipeline
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource, attributes]
+      exporters: [otlp/jaeger, otlp/tempo, logging]
+    
+    # Metrics pipeline
+    metrics:
+      receivers: [otlp, prometheus]
+      processors: [memory_limiter, batch, resource]
+      exporters: [prometheus, logging]
+    
+    # Logs pipeline
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch, resource]
+      exporters: [loki, logging]

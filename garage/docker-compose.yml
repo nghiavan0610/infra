@@ -1,0 +1,30 @@
+services:
+  garage:
+    image: dxflrs/garage:v2.0.0
+    container_name: garage
+    restart: unless-stopped
+    volumes:
+      - ./meta:/var/lib/garage/meta
+      - ./data:/var/lib/garage/data
+      - ./config/garage.toml:/etc/garage.toml
+    ports:
+      - "${GARAGE_S3_API_PORT}:3900" # API port (S3-compatible)
+      - "${GARAGE_RPC_PORT}:3901" # RPC port (inter-node; still used on single node)
+      - "${GARAGE_S3_WEB_PORT}:3902" # Optional, if you want to expose bucket as web
+      - "${GARAGE_ADMIN_PORT}:3903" #
+      # - "${GARAGE_K2V_API_PORT}:3904" # K2V API
+    environment:
+      - RUST_LOG=${RUST_LOG}
+
+  webui:
+    image: khairul169/garage-webui:latest
+    container_name: garage-webui
+    restart: unless-stopped
+    volumes:
+      - ./config/garage.toml:/etc/garage.toml
+    ports:
+      - "${GARAGE_WEB_UI_PORT}:3909"
+    environment:
+      API_BASE_URL: "http://garage:3903"
+      S3_ENDPOINT_URL: "http://garage:3900"
+      AUTH_USER_PASS: "${GARAGE_AUTH_USER}:${GARAGE_AUTH_USER_PASS}"

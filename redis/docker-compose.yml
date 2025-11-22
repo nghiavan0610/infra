@@ -1,0 +1,17 @@
+services:
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - $REDIS_PORT:6379
+    environment:
+      - REDIS_PASSWORD=$REDIS_PASSWORD
+    volumes:
+      - redis-data:/data
+    command: redis-server --protected-mode yes --requirepass $REDIS_PASSWORD
+
+volumes:
+  redis-data:

@@ -1,0 +1,70 @@
+# OpenSearch Security Configuration
+# ================================
+
+type: "config"
+config_version: 2
+
+config:
+  dynamic:
+    # HTTP authentication
+    http:
+      anonymous_auth_enabled: false
+      xff:
+        enabled: false
+        internalProxies: '192\.168\.0\.10|192\.168\.0\.11'
+        remoteIpHeader: "x-forwarded-for"
+
+    # Authentication backends
+    authc:
+      # Internal users database
+      internal_users_database:
+        description: "Authenticate via internal users database"
+        http_enabled: true
+        transport_enabled: true
+        order: 0
+        http_authenticator:
+          type: basic
+          challenge: true
+        authentication_backend:
+          type: internal
+
+    # Authorization
+    authz:
+      roles_from_myldap:
+        description: "Authorize via LDAP or Active Directory"
+        http_enabled: false
+        transport_enabled: false
+        authorization_backend:
+          type: ldap
+
+    # Audit logging
+    audit:
+      type: internal_opensearch
+      config:
+        enable_rest: true
+        enable_transport: true
+        resolve_bulk_requests: true
+        log_request_body: true
+        resolve_indices: true
+        exclude_sensitive_headers: true
+        ignore_users:
+          - "kibanaserver"
+        ignore_requests:
+          - "SearchRequest"
+          - "indices:data/read/*"
+        compliance:
+          enabled: true
+          write_log_diffs: false
+          read_watched_fields:
+            users: []
+            indices: []
+          read_ignore_users:
+            - "kibanaserver"
+          write_watched_indices: []
+          write_ignore_users:
+            - "kibanaserver"
+
+    # Multi-tenancy
+    multi_rolespan_enabled: true
+    server_username: kibanaserver
+    do_not_fail_on_forbidden: false

@@ -1,0 +1,104 @@
+# compiled output
+/dist
+/node_modules
+/build
+.agent
+.vs
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+
+# Tests
+/coverage
+/.nyc_output
+
+# IDEs and editors
+/.idea
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# IDE - VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# dotenv environment variable files
+.env
+.env.development.local
+.env.test.local
+.env.production.local
+.env.local
+
+# temp directory
+.temp
+.tmp
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Diagnostic reports (https://nodejs.org/api/report.html)
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# Development automation scripts (local environment specific)
+start-dev.sh
+stop-dev.sh
+status-dev.sh
+DEV_AUTOMATION.md
+.ssh_tunnel_pid
+
+# Local development setup files (user-specific)
+dev-start.sh
+dev-stop.sh
+service-restart.sh
+restart-tunnel.sh
+check-logs.sh
+quick-test-api.sh
+test-new-api.sh
+.service-pids/
+health-check.sh
+redis.conf
+
+# Local documentation (user-specific setup guides)
+LOCAL_SETUP.md
+TROUBLESHOOTING.md
+START_HERE.md
+QUICK_REFERENCE.md
+SINGLE_SERVICE_GUIDE.md
+README_SERVICE_RESTART.md
+SERVICE_RESTART_SUMMARY.md
+CLAUDE.md
+redis.conf
+
+# New optimized development scripts (local environment specific)
+dev-start-minimal.sh
+dev-stop-minimal.sh
+dev-build.sh
+PERFORMANCE_OPTIMIZATION_README.md
+
+
+*/data
+*/certs
+
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*.pub

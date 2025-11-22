@@ -1,0 +1,108 @@
+# NATS Authentication Configuration Template
+# This file is processed by envsubst to generate auth.conf
+
+# Account Definitions
+accounts {
+    # System account for NATS management and monitoring
+    SYS: {
+        users: [
+            {
+                user: "${SYS_USER}"
+                password: "${SYS_PASS}"
+            }
+        ]
+    }
+    
+    # Main application account with service-specific permissions
+    BRANDMATE: {
+        users: [
+            # Teacher Service
+            {
+                user: "${TEACHER_SERVICE_USER}"
+                password: "${TEACHER_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "teacher.*",
+                        "events.teacher.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "user.query.*",
+                        "course.query.*", 
+                        "events.user.*",
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+            
+            # User Service
+            {
+                user: "${USER_SERVICE_USER}"
+                password: "${USER_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "user.*",
+                        "events.user.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "teacher.query.*",
+                        "course.query.*",
+                        "events.teacher.*", 
+                        "events.course.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+            
+            # Course Service
+            {
+                user: "${COURSE_SERVICE_USER}"
+                password: "${COURSE_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "course.*",
+                        "events.course.*",
+                        "notifications.*"
+                    ]
+                    subscribe = [
+                        "user.query.*",
+                        "teacher.query.*",
+                        "events.user.*",
+                        "events.teacher.*",
+                        "_INBOX.*"
+                    ]
+                }
+            },
+            
+            # Notification Service
+            {
+                user: "${NOTIFICATION_SERVICE_USER}"
+                password: "${NOTIFICATION_SERVICE_PASS}"
+                permissions = {
+                    publish = [
+                        "notifications.email.*",
+                        "notifications.sms.*",
+                        "notifications.push.*"
+                    ]
+                    subscribe = [
+                        "notifications.*",
+                        "events.*"
+                    ]
+                }
+            }
+        ]
+        
+        # JetStream configuration for BRANDMATE account
+        jetstream: {
+            max_memory: ${NATS_MAX_MEMORY}
+            max_store: ${NATS_MAX_FILE}
+            max_streams: 100
+            max_consumers: 1000
+        }
+    }
+}
+
+# System account for monitoring and management
+system_account: "SYS"

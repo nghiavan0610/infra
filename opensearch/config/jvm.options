@@ -1,0 +1,52 @@
+# JVM Options for Production OpenSearch
+# ====================================
+
+# Heap size (adjust based on available memory)
+-Xms2g
+-Xmx2g
+
+# GC Options
+-XX:+UseG1GC
+-XX:G1HeapRegionSize=32m
+-XX:+UnlockExperimentalVMOptions
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200
+-XX:+DisableExplicitGC
+
+# GC Logging
+-Xlog:gc*,gc+age=trace,safepoint:logs/gc.log:utctime,pid,tid,level
+-XX:+UseGCLogFileRotation
+-XX:NumberOfGCLogFiles=32
+-XX:GCLogFileSize=64m
+
+# Memory settings
+-XX:+AlwaysPreTouch
+-server
+-Djava.awt.headless=true
+
+# File encoding
+-Dfile.encoding=UTF-8
+
+# Security manager
+-Djava.security.policy=all.policy
+
+# Network settings
+-Djava.net.preferIPv4Stack=true
+
+# Temporary directory
+-Djava.io.tmpdir=/tmp
+
+# Error handling
+-XX:+HeapDumpOnOutOfMemoryError
+-XX:HeapDumpPath=data
+
+# Performance tuning
+-XX:+UseTLAB
+-XX:+ResizeTLAB
+-XX:+UseBiasedLocking
+-XX:+OptimizeStringConcat
+
+# OpenSearch specific
+-Dopensearch.path.home=/usr/share/opensearch
+-Dopensearch.path.conf=/usr/share/opensearch/config
+-Dopensearch.distribution.type=docker

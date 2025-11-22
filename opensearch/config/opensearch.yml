@@ -1,0 +1,59 @@
+# OpenSearch Production Configuration
+# =================================
+
+# Cluster settings
+cluster.name: production-opensearch
+node.name: opensearch-node1
+node.roles: [cluster_manager, data, ingest]
+
+# Network settings
+network.host: 0.0.0.0
+http.port: 9200
+transport.port: 9300
+
+# Discovery settings (single node for now, can be expanded)
+discovery.type: single-node
+
+# Memory settings
+bootstrap.memory_lock: true
+
+# Data and logs paths
+path.data: /usr/share/opensearch/data
+path.logs: /usr/share/opensearch/logs
+path.repo: ["/usr/share/opensearch/backup"]
+
+# Security settings
+plugins.security.disabled: false
+plugins.security.allow_default_init_securityindex: true
+plugins.security.check_snapshot_restore_write_privileges: true
+plugins.security.enable_snapshot_restore_privilege: true
+
+# SSL/TLS settings (disabled for development, enable for production)
+plugins.security.ssl.http.enabled: false
+plugins.security.ssl.transport.enabled: false
+
+# Performance settings
+indices.fielddata.cache.size: 40%
+indices.memory.index_buffer_size: 30%
+indices.memory.min_index_buffer_size: 96mb
+
+# Thread pool settings
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+# Circuit breaker settings
+indices.breaker.total.limit: 70%
+indices.breaker.fielddata.limit: 40%
+indices.breaker.request.limit: 40%
+
+# Recovery settings
+cluster.routing.allocation.node_concurrent_recoveries: 2
+
+# Performance settings
+indices.recovery.max_bytes_per_sec: 40mb
+
+# Logging level
+logger.level: INFO
+
+# Security settings
+plugins.security.unsupported.restapi.allow_securityconfig_modification: true

@@ -1,0 +1,65 @@
+services:
+  # NATS Server with config file (recommended)
+  nats:
+    image: nats:2.10-alpine
+    container_name: nats
+    ports:
+      - "${NATS_PORT:-4222}:4222" # Client connections
+      - "${NATS_HTTP_PORT:-8222}:8222" # HTTP monitoring
+    volumes:
+      - ./config/nats.conf:/etc/nats/nats.conf:ro
+      - ./config/auth.conf:/etc/nats/auth.conf:ro
+      - ./data:/data
+      - ./logs:/var/log/nats
+    environment:
+      - NATS_LOG_LEVEL=${NATS_LOG_LEVEL:-info}
+    command: ["-c", "/etc/nats/nats.conf"]
+    restart: unless-stopped
+    # Resource limits for better performance
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - nats-network
+
+  # NATS Monitoring Dashboard (optional - comment out if not needed)
+  nats-surveyor:
+    image: natsio/nats-surveyor:latest
+    container_name: nats-surveyor
+    ports:
+      - "7777:7777"
+    environment:
+      - NATS_SURVEYOR_SERVERS=nats://nats:4222
+      - NATS_SURVEYOR_USER=${SURVEYOR_USER}
+      - NATS_SURVEYOR_PASSWORD=${SURVEYOR_PASS}
+    depends_on:
+      nats:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - nats-network
+    profiles:
+      - monitoring # This allows you to optionally start monitoring
+
+networks:
+  nats-network:
+    driver: bridge

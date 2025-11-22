@@ -1,0 +1,116 @@
+services:
+  opensearch-node1:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: opensearch-node1
+    hostname: opensearch-node1
+    environment:
+      # Cluster settings
+      - cluster.name=${CLUSTER_NAME}
+      - node.name=${NODE_NAME}
+      - network.host=${NETWORK_HOST}
+      - discovery.type=single-node
+
+      # Security settings
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_INITIAL_ADMIN_PASSWORD}
+      - DISABLE_INSTALL_DEMO_CONFIG=${DISABLE_INSTALL_DEMO_CONFIG}
+      - DISABLE_SECURITY_PLUGIN=${DISABLE_SECURITY_PLUGIN}
+
+      # Performance settings
+      - "OPENSEARCH_JAVA_OPTS=${OPENSEARCH_JAVA_OPTS}"
+      - bootstrap.memory_lock=true
+
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: ${MAX_OPEN_FILES}
+        hard: ${MAX_OPEN_FILES}
+
+    volumes:
+      - ./data:/usr/share/opensearch/data
+      - ./logs:/usr/share/opensearch/logs
+      - ./backup:/usr/share/opensearch/backup
+      - ./config:/usr/share/opensearch/config/custom
+
+    ports:
+      - "${OPENSEARCH_PORT}:9200"
+
+    networks:
+      - opensearch-net
+
+    restart: unless-stopped
+
+    healthcheck:
+      test:
+        ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.15.0
+    container_name: opensearch-dashboards
+    hostname: opensearch-dashboards
+    environment:
+      - OPENSEARCH_HOSTS=http://opensearch-node1:9200
+      - SERVER_HOST=${OPENSEARCH_DASHBOARDS_SERVER_HOST}
+      - SERVER_NAME=${OPENSEARCH_DASHBOARDS_SERVER_NAME}
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=${DISABLE_SECURITY_PLUGIN}
+
+    ports:
+      - "${OPENSEARCH_DASHBOARDS_PORT}:5601"
+
+    volumes:
+      - ./dashboards-config:/usr/share/opensearch-dashboards/config/custom
+
+    depends_on:
+      opensearch-node1:
+        condition: service_healthy
+
+    networks:
+      - opensearch-net
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # Optional: OpenSearch Performance Analyzer
+  opensearch-performance-analyzer:
+    image: opensearchproject/opensearch:2.15.0
+    container_name: opensearch-performance-analyzer
+    hostname: opensearch-performance-analyzer
+    command: ["./performance-analyzer-agent", "--opensearch-pid", "1"]
+    environment:
+      - OPENSEARCH_HOSTS=http://opensearch-node1:9200
+
+    depends_on:
+      opensearch-node1:
+        condition: service_healthy
+
+    networks:
+      - opensearch-net
+
+    restart: unless-stopped
+
+    profiles:
+      - monitoring
+
+networks:
+  opensearch-net:
+    driver: bridge
+    name: opensearch-network
+
+volumes:
+  opensearch-data:
+    driver: local
+  opensearch-logs:
+    driver: local
+  opensearch-backup:
+    driver: local
