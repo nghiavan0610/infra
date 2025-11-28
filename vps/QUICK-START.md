@@ -34,14 +34,25 @@ ssh root@YOUR_VPS_IP
 # Upload the script
 # Option A: Copy-paste the script content
 # Option B: Use scp
-scp vps-initial-setup.sh root@YOUR_VPS_IP:/root/
+scp -O vps-initial-setup.sh root@YOUR_VPS_IP:/root/
+
+scp -O vps-initial-setup.sh vps-health-check.sh opc@atenyx.com:~/
 ```
 
 ### Run Initial Setup
 ```bash
 # On VPS as root
+# Firewalld rate limiting (good enough)
 chmod +x vps-initial-setup.sh
 bash vps-initial-setup.sh
+
+# Optional
+# Firewalld rate limiting
+# Audit logging (forensics)
+# Monitoring scripts (check-ssh-attacks)
+# IP blocking commands (block-ip, unblock-ip)
+# Enhanced SSH hardening
+bash setup-ssh-protection-ol9.sh
 ```
 
 ### Interactive Prompts

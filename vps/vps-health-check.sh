@@ -100,21 +100,21 @@ echo "🔐 SSH Security"
 echo "───────────────"
 
 # Check root login
-if sudo grep -q "^PermitRootLogin no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null; then
+if sudo bash -c 'grep -qE "^\s*PermitRootLogin\s+no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null'; then
     check_pass "Root login disabled"
 else
     check_fail "Root login NOT disabled" "Set 'PermitRootLogin no' in sshd_config"
 fi
 
 # Check password authentication
-if sudo grep -q "^PasswordAuthentication no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null; then
+if sudo bash -c 'grep -qE "^\s*PasswordAuthentication\s+no" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null'; then
     check_pass "Password authentication disabled (key-based only)"
-elif sudo grep -q "^PasswordAuthentication yes" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null; then
+elif sudo bash -c 'grep -qE "^\s*PasswordAuthentication\s+yes" /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null'; then
     check_warn "Password authentication enabled" "Consider using SSH keys only"
 fi
 
 # Check SSH port
-SSH_PORT=$(sudo grep -h "^Port " /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null | awk '{print $2}' | head -1)
+SSH_PORT=$(sudo bash -c 'grep -h "^Port " /etc/ssh/sshd_config /etc/ssh/sshd_config.d/* 2>/dev/null' | awk '{print $2}' | head -1)
 if [[ -n "$SSH_PORT" ]] && [[ "$SSH_PORT" != "22" ]]; then
     check_pass "SSH on custom port: $SSH_PORT"
 else
@@ -188,7 +188,13 @@ if command -v fail2ban-client &> /dev/null; then
         check_fail "Fail2ban installed but not running" "Start with: sudo systemctl start fail2ban"
     fi
 else
-    check_warn "Fail2ban not installed" "Install with: sudo apt install fail2ban"
+    # Check if this is Oracle Linux 9 (fail2ban not available)
+    if [ -f /etc/os-release ] && grep -q "ol" /etc/os-release; then
+        check_info "Fail2ban not available on Oracle Linux 9"
+        check_info "SSH protected by: key-only auth + MaxAuthTries"
+    else
+        check_warn "Fail2ban not installed" "Install with: sudo apt install fail2ban"
+    fi
 fi
 
 echo ""
@@ -295,7 +301,14 @@ if command -v unattended-upgrade &> /dev/null; then
     else
         check_warn "unattended-upgrades installed but not active"
     fi
-# Check yum-cron (CentOS/RHEL)
+# Check dnf-automatic (Oracle Linux 9, RHEL 9, Fedora)
+elif systemctl list-unit-files | grep -q dnf-automatic.timer; then
+    if systemctl is-active --quiet dnf-automatic.timer 2>/dev/null; then
+        check_pass "Automatic updates enabled (dnf-automatic)"
+    else
+        check_warn "dnf-automatic installed but timer not active" "Run: sudo systemctl enable --now dnf-automatic.timer"
+    fi
+# Check yum-cron (CentOS/RHEL 7-8)
 elif command -v yum-cron &> /dev/null; then
     if systemctl is-active --quiet yum-cron; then
         check_pass "Automatic updates enabled (yum-cron)"
@@ -303,7 +316,7 @@ elif command -v yum-cron &> /dev/null; then
         check_warn "yum-cron installed but not active"
     fi
 else
-    check_warn "Automatic updates not configured" "Install unattended-upgrades or yum-cron"
+    check_warn "Automatic updates not configured" "Install dnf-automatic or unattended-upgrades"
 fi
 
 # Check for pending updates

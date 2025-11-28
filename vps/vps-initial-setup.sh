@@ -80,26 +80,38 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     apt-get update
     apt-get upgrade -y
     apt-get install -y curl wget vim git ufw fail2ban unattended-upgrades
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]]; then
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
     yum update -y
-    yum install -y curl wget vim git firewalld fail2ban
+    # Install EPEL (for additional packages)
+    yum install -y epel-release || true
+    # Install base packages (fail2ban not available on OL9, will use firewalld instead)
+    yum install -y curl wget vim git firewalld policycoreutils-python-utils audit
+    # Try to install fail2ban if available (works on CentOS/RHEL 7-8)
+    yum install -y fail2ban fail2ban-systemd 2>/dev/null || log_warn "fail2ban not available (will use firewalld rate limiting)"
 fi
 log_info "System updated"
 
 #######################################
-# Create new sudo user
+# Create/Update sudo user
 #######################################
-log_step "Creating new user: $NEW_USER"
+log_step "Setting up user: $NEW_USER"
 
 # Check if user exists
 if id "$NEW_USER" &>/dev/null; then
-    log_warn "User $NEW_USER already exists"
+    log_info "User $NEW_USER already exists, updating configuration..."
+    # Update password for existing user
+    echo "$NEW_USER:$NEW_PASSWORD" | chpasswd
+    log_info "Password updated for $NEW_USER"
 else
+    # Create new user
     useradd -m -s /bin/bash "$NEW_USER"
     echo "$NEW_USER:$NEW_PASSWORD" | chpasswd
-    usermod -aG sudo "$NEW_USER" 2>/dev/null || usermod -aG wheel "$NEW_USER"
-    log_info "User $NEW_USER created with sudo privileges"
+    log_info "User $NEW_USER created"
 fi
+
+# Ensure user has sudo privileges (works for both new and existing users)
+usermod -aG sudo "$NEW_USER" 2>/dev/null || usermod -aG wheel "$NEW_USER"
+log_info "Sudo privileges confirmed for $NEW_USER"
 
 #######################################
 # Setup SSH key authentication
@@ -150,6 +162,25 @@ if [[ -n "$SSH_PUBLIC_KEY" ]]; then
     log_info "SSH password authentication disabled (key-based only)"
 fi
 
+# Configure SELinux for custom SSH port (RHEL-based systems)
+if [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
+    if [[ "$SSH_PORT" != "22" ]]; then
+        log_step "Configuring SELinux for SSH port $SSH_PORT..."
+        # Check if semanage is available
+        if command -v semanage &> /dev/null; then
+            # Check if port is already configured
+            if ! semanage port -l | grep -q "ssh_port_t.*$SSH_PORT"; then
+                semanage port -a -t ssh_port_t -p tcp $SSH_PORT 2>/dev/null || \
+                semanage port -m -t ssh_port_t -p tcp $SSH_PORT 2>/dev/null || \
+                log_warn "Could not configure SELinux for port $SSH_PORT"
+            fi
+            log_info "SELinux configured for SSH port $SSH_PORT"
+        else
+            log_warn "semanage not available, SELinux may block SSH on port $SSH_PORT"
+        fi
+    fi
+fi
+
 # Restart SSH (don't disconnect current session)
 systemctl restart sshd || systemctl restart ssh
 
@@ -174,7 +205,7 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     ufw status
     log_info "UFW firewall configured"
 
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]]; then
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
     # Firewalld setup
     systemctl start firewalld
     systemctl enable firewalld
@@ -186,11 +217,26 @@ elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]]; 
 fi
 
 #######################################
-# Configure fail2ban
+# Configure SSH Protection (fail2ban or alternative)
 #######################################
-log_step "Configuring fail2ban for SSH protection..."
+log_step "Configuring SSH brute-force protection..."
 
-cat > /etc/fail2ban/jail.local <<EOF
+# Verify fail2ban is installed
+if ! command -v fail2ban-server &> /dev/null; then
+    log_warn "fail2ban not available"
+
+    # For Oracle Linux 9, skip aggressive firewalld rate limiting
+    # SSH is already protected by: key-only auth, MaxAuthTries=3, firewall
+    if [[ "$OS" == "ol" ]]; then
+        log_info "Oracle Linux 9: SSH protected by key-only auth + MaxAuthTries=3"
+        log_info "Skipping firewalld rate limiting (can cause connection issues)"
+        log_info "For optional advanced protection later, run: ./setup-ssh-protection-ol9.sh"
+    else
+        log_warn "Install fail2ban manually for SSH protection"
+    fi
+else
+    # fail2ban is available, configure it
+    cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -207,15 +253,16 @@ logpath = /var/log/auth.log
 maxretry = 3
 EOF
 
-# For RHEL-based systems
-if [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]]; then
-    sed -i 's|/var/log/auth.log|/var/log/secure|' /etc/fail2ban/jail.local
+    # For RHEL-based systems
+    if [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
+        sed -i 's|/var/log/auth.log|/var/log/secure|' /etc/fail2ban/jail.local
+    fi
+
+    systemctl enable fail2ban
+    systemctl restart fail2ban
+
+    log_info "Fail2ban configured (3 failed attempts = 1 hour ban)"
 fi
-
-systemctl enable fail2ban
-systemctl restart fail2ban
-
-log_info "Fail2ban configured (3 failed attempts = 1 hour ban)"
 
 #######################################
 # Enable automatic security updates
@@ -241,11 +288,25 @@ APT::Periodic::AutocleanInterval "7";
 EOF
 
     log_info "Automatic security updates enabled"
-elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]]; then
-    yum install -y yum-cron
-    systemctl enable yum-cron
-    systemctl start yum-cron
-    log_info "Automatic security updates enabled (yum-cron)"
+elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
+    # Oracle Linux 9 uses dnf-automatic instead of yum-cron
+    if command -v dnf &> /dev/null; then
+        yum install -y dnf-automatic
+
+        # Configure to apply security updates automatically
+        sed -i 's/^apply_updates = .*/apply_updates = yes/' /etc/dnf/automatic.conf 2>/dev/null || true
+        sed -i 's/^upgrade_type = .*/upgrade_type = security/' /etc/dnf/automatic.conf 2>/dev/null || true
+
+        systemctl enable dnf-automatic.timer
+        systemctl start dnf-automatic.timer
+        log_info "Automatic security updates enabled (dnf-automatic)"
+    else
+        # Fallback for older RHEL/CentOS versions
+        yum install -y yum-cron
+        systemctl enable yum-cron
+        systemctl start yum-cron
+        log_info "Automatic security updates enabled (yum-cron)"
+    fi
 fi
 
 #######################################
@@ -329,7 +390,7 @@ log_info "VPS Initial Setup Complete!"
 echo "=========================================="
 echo ""
 log_info "Configuration Summary:"
-echo "  - New user: $NEW_USER (with sudo access)"
+echo "  - User: $NEW_USER (with sudo access)"
 echo "  - SSH port: $SSH_PORT"
 echo "  - Root login: DISABLED"
 if [[ -n "$SSH_PUBLIC_KEY" ]]; then
@@ -338,7 +399,11 @@ else
 echo "  - SSH auth: PASSWORD (consider adding SSH key)"
 fi
 echo "  - Firewall: ENABLED (ports $SSH_PORT, 80, 443)"
-echo "  - Fail2ban: ENABLED"
+if command -v fail2ban-server &> /dev/null; then
+    echo "  - Fail2ban: ENABLED"
+else
+    echo "  - SSH protection: MaxAuthTries=3, key-only auth"
+fi
 echo "  - Auto updates: ENABLED"
 echo "  - Timezone: UTC"
 echo ""
