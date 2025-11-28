@@ -1,17 +1,103 @@
+# =============================================================================
+# Redis Production Configuration
+# =============================================================================
+# Usage:
+#   docker compose up -d          # Start Redis
+#   docker compose logs -f        # View logs
+#   docker compose exec redis redis-cli -a $REDIS_PASSWORD  # Connect
+# =============================================================================
+
 services:
   redis:
-    image: redis:7
+    image: redis:7-alpine
     container_name: redis
     restart: unless-stopped
-    env_file:
-      - ./.env
-    ports:
-      - $REDIS_PORT:6379
-    environment:
-      - REDIS_PASSWORD=$REDIS_PASSWORD
-    volumes:
-      - redis-data:/data
-    command: redis-server --protected-mode yes --requirepass $REDIS_PASSWORD
 
+    # -----------------------------------------
+    # Command with config file and password
+    # -----------------------------------------
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - ${REDIS_PASSWORD}
+
+    # -----------------------------------------
+    # Ports
+    # -----------------------------------------
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+    # -----------------------------------------
+    # Volumes
+    # -----------------------------------------
+    volumes:
+      # Data persistence (RDB + AOF)
+      - redis_data:/data
+      # Custom configuration
+      - ./config/redis.conf:/usr/local/etc/redis/redis.conf:ro
+
+    # -----------------------------------------
+    # Resource Limits
+    # -----------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1536M    # maxmemory + overhead
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+    # -----------------------------------------
+    # Health Check
+    # -----------------------------------------
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    # -----------------------------------------
+    # Security Options
+    # -----------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # -----------------------------------------
+    # Sysctls (performance tuning)
+    # -----------------------------------------
+    sysctls:
+      - net.core.somaxconn=511
+
+    # -----------------------------------------
+    # Logging
+    # -----------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # -----------------------------------------
+    # Network
+    # -----------------------------------------
+    networks:
+      - redis-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
 volumes:
-  redis-data:
+  redis_data:
+    driver: local
+    name: redis_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  redis-network:
+    driver: bridge
+    name: redis-network
