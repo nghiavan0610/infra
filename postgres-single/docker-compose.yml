@@ -1,28 +1,112 @@
+# =============================================================================
+# PostgreSQL Single Node - Production Configuration
+# =============================================================================
+
 services:
   postgres:
     image: postgres:17-alpine
     container_name: postgres
-    restart: always
+    restart: unless-stopped
+
+    # ---------------------------------------------
+    # Environment Variables
+    # ---------------------------------------------
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      # Non-root user for application access
       POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER}
       POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
+      # Timezone
+      TZ: UTC
+
+    # ---------------------------------------------
+    # Port Mapping
+    # ---------------------------------------------
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
+
+    # ---------------------------------------------
+    # Volume Mounts
+    # ---------------------------------------------
     volumes:
-      - ./data:/var/lib/postgresql/data
-      - ./logs:/var/log/postgresql
-      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
-      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+      # Data directory (persistent)
+      - postgres_data:/var/lib/postgresql/data
+      # Configuration files
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # Initialization scripts (run once on first start)
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+      # Backup directory
+      - ./backups:/backups
+
+    # ---------------------------------------------
+    # Resource Limits (Adjust based on VPS)
+    # ---------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '2'           # Max 2 CPU cores
+          memory: 2G          # Max 2GB RAM
+        reservations:
+          cpus: '0.5'         # Reserved 0.5 CPU
+          memory: 512M        # Reserved 512MB RAM
+
+    # ---------------------------------------------
+    # Health Check
+    # ---------------------------------------------
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
-        ]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
       timeout: 5s
-      retries: 10
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+      retries: 5
+      start_period: 30s
+
+    # ---------------------------------------------
+    # Security Options
+    # ---------------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # ---------------------------------------------
+    # Startup Command
+    # ---------------------------------------------
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+
+    # ---------------------------------------------
+    # Logging
+    # ---------------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # ---------------------------------------------
+    # Network
+    # ---------------------------------------------
+    networks:
+      - postgres_network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    name: postgres_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  postgres_network:
+    driver: bridge
+    name: postgres_network
