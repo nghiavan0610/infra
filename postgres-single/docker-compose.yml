@@ -17,8 +17,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_INITDB_ARGS: "--encoding=UTF8"
       # Non-root user for application access
-      POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER}
-      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD}
+      POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER:-}
+      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD:-}
+      POSTGRES_APP_SCHEMA: ${POSTGRES_APP_SCHEMA:-public}
       # Timezone
       TZ: UTC
 
@@ -26,7 +27,7 @@ services:
     # Port Mapping
     # ---------------------------------------------
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432" # Only localhost, not public
 
     # ---------------------------------------------
     # Volume Mounts
@@ -39,8 +40,6 @@ services:
       - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
       # Initialization scripts (run once on first start)
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
-      # Backup directory
-      - ./backups:/backups
 
     # ---------------------------------------------
     # Resource Limits (Adjust based on VPS)
@@ -48,17 +47,21 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'           # Max 2 CPU cores
-          memory: 2G          # Max 2GB RAM
+          cpus: "2" # Max 2 CPU cores
+          memory: 2G # Max 2GB RAM
         reservations:
-          cpus: '0.5'         # Reserved 0.5 CPU
-          memory: 512M        # Reserved 512MB RAM
+          cpus: "0.5" # Reserved 0.5 CPU
+          memory: 512M # Reserved 512MB RAM
 
     # ---------------------------------------------
     # Health Check
     # ---------------------------------------------
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -94,6 +97,7 @@ services:
     # ---------------------------------------------
     networks:
       - postgres_network
+      # - atenyx-be-network
 
 # =============================================================================
 # Volumes
@@ -110,3 +114,5 @@ networks:
   postgres_network:
     driver: bridge
     name: postgres_network
+  # atenyx-be-network:
+  #   external: true

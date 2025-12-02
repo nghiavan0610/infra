@@ -8,10 +8,11 @@ Production-ready PostgreSQL single-node deployment using Docker.
 - ✅ Optimized for production workloads
 - ✅ Secure configuration (scram-sha-256)
 - ✅ Resource limits (CPU/Memory)
-- ✅ Automated backups with rotation
 - ✅ Comprehensive logging
 - ✅ Health checks
 - ✅ Non-root application user
+- ✅ User & schema management scripts
+- ✅ Custom schema support (for Prisma, etc.)
 
 ---
 
@@ -33,13 +34,14 @@ openssl rand -base64 32  # For POSTGRES_NON_ROOT_PASSWORD
 nano .env
 
 chmod 644 config/postgresql.conf config/pg_hba.conf
+chmod 755 init-scripts/01-init-users.sh
 ```
 
 ### 2. Start PostgreSQL
 
 ```bash
 # Create required directories
-mkdir -p logs backups
+mkdir -p logs
 
 # Start container
 docker compose up -d
@@ -75,12 +77,13 @@ postgres-single/
 │   ├── postgresql.conf    # PostgreSQL configuration
 │   └── pg_hba.conf        # Client authentication
 ├── init-scripts/
-│   └── 01-init-users.sh   # Creates application user
+│   └── 01-init-users.sh   # Creates application user on first start
 ├── scripts/
-│   └── backup.sh          # Backup automation
+│   ├── create-user.sh     # Create new user + schema
+│   ├── list-users.sh      # List all users & schemas
+│   └── delete-user.sh     # Delete user
 ├── data/                  # PostgreSQL data (auto-created)
-├── logs/                  # PostgreSQL logs
-└── backups/               # Backup files
+└── logs/                  # PostgreSQL logs
 ```
 
 ---
@@ -112,43 +115,69 @@ deploy:
 
 ---
 
+## User & Schema Management
+
+### Create New User
+
+```bash
+# User with public schema (default)
+./scripts/create-user.sh myuser mypassword
+
+# User with custom schema
+./scripts/create-user.sh api_user secret123 api
+./scripts/create-user.sh admin_user secret456 admin
+
+# Example: Create user for new microservice
+./scripts/create-user.sh orders_svc password123 orders
+```
+
+### List Users & Schemas
+
+```bash
+./scripts/list-users.sh
+```
+
+Output shows:
+- All database users
+- All schemas and their owners
+- Permission mappings
+
+### Delete User
+
+```bash
+# Delete user only (keeps schema, reassigns objects to postgres)
+./scripts/delete-user.sh myuser
+
+# Delete user AND their owned schema (DESTRUCTIVE)
+./scripts/delete-user.sh myuser --drop-schema
+```
+
+### Initial User (via Init Script)
+
+The `init-scripts/01-init-users.sh` runs **only on first startup** and creates:
+- User: `POSTGRES_NON_ROOT_USER`
+- Schema: `POSTGRES_APP_SCHEMA` (defaults to `public`)
+
+Configure in `.env`:
+```env
+POSTGRES_NON_ROOT_USER=dev
+POSTGRES_NON_ROOT_PASSWORD=your_password
+POSTGRES_APP_SCHEMA=app
+```
+
 ## Backups
 
-### Manual Backup
+Backups are handled by the **centralized backup system** in `../backup/`.
 
 ```bash
-# Backup main database
-./scripts/backup.sh backup
+# Run backup
+../backup/scripts/backup.sh
 
-# Backup all databases
-./scripts/backup.sh backup-all
-
-# List backups
-./scripts/backup.sh list
+# Restore PostgreSQL
+../backup/scripts/restore.sh postgres
 ```
 
-### Automated Backups (Cron)
-
-```bash
-# Edit crontab
-crontab -e
-
-# Add daily backup at 2 AM
-0 2 * * * /path/to/postgres-single/scripts/backup.sh backup >> /var/log/postgres-backup.log 2>&1
-
-# Add weekly full backup on Sunday at 3 AM
-0 3 * * 0 /path/to/postgres-single/scripts/backup.sh backup-all >> /var/log/postgres-backup.log 2>&1
-```
-
-### Restore from Backup
-
-```bash
-# List available backups
-./scripts/backup.sh list
-
-# Restore specific backup
-./scripts/backup.sh restore ./backups/myapp_20250101_020000.sql.gz
-```
+See `../backup/README.md` for full documentation.
 
 ---
 
@@ -364,7 +393,7 @@ Major upgrades require data migration:
 
 ```bash
 # 1. Backup everything
-./scripts/backup.sh backup-all
+../backup/scripts/backup.sh
 
 # 2. Stop old container
 docker compose down
@@ -376,7 +405,7 @@ docker compose down
 # Option A: Fresh start with restore
 docker volume rm postgres_data
 docker compose up -d
-./scripts/backup.sh restore ./backups/all_databases_TIMESTAMP.sql.gz
+../backup/scripts/restore.sh postgres
 
 # Option B: Use pg_upgrade (more complex)
 # See PostgreSQL documentation
@@ -415,7 +444,6 @@ Add to `.gitignore`:
 .env
 data/
 logs/
-backups/
 ```
 
 ---
