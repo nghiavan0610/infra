@@ -1,17 +1,37 @@
-# Redis Production Setup
+# Redis Production Configuration - Cache & Queue
 
-Production-ready Redis deployment using Docker.
+Two isolated Redis instances optimized for different use cases.
 
-## Features
+## Architecture
 
-- Redis 7 Alpine (lightweight)
-- Password authentication
-- Persistence (RDB + AOF hybrid)
-- Memory limits with LRU eviction
-- Dangerous commands disabled
-- Resource limits (CPU/Memory)
-- Health checks
-- Slow query logging
+```
+                    ┌─────────────────┐
+                    │   Application   │
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+    ┌─────────────────┐           ┌─────────────────┐
+    │   redis-cache   │           │   redis-queue   │
+    │   Port: 6379    │           │   Port: 6380    │
+    │                 │           │                 │
+    │ • LRU eviction  │           │ • No eviction   │
+    │ • No persistence│           │ • AOF + RDB     │
+    │ • Volatile data │           │ • Durable data  │
+    └─────────────────┘           └─────────────────┘
+```
+
+## Comparison
+
+| Aspect | redis-cache | redis-queue |
+|--------|-------------|-------------|
+| **Port** | 6379 | 6380 |
+| **Eviction** | `allkeys-lru` | `noeviction` |
+| **Persistence** | None | AOF + RDB |
+| **Data loss** | Acceptable | NOT acceptable |
+| **Use case** | API cache, sessions | BullMQ, job queues |
+| **Backup** | Not needed | Include in backups |
 
 ---
 
@@ -25,40 +45,38 @@ cd redis
 # Create environment file
 cp .env.example .env
 
-# Generate strong password
-openssl rand -base64 32
+# Generate passwords
+openssl rand -base64 32  # For REDIS_CACHE_PASSWORD
+openssl rand -base64 32  # For REDIS_QUEUE_PASSWORD
 
-# Edit .env with your password
+# Edit .env with your passwords
 nano .env
 ```
 
-### 2. Start Redis
+### 2. Start
 
 ```bash
-# Fix config permissions
-chmod 644 config/redis.conf
-
-# Start container
+# Start both instances
 docker compose up -d
+
+# Start only cache
+docker compose up -d redis-cache
+
+# Start only queue
+docker compose up -d redis-queue
 
 # Check status
 docker compose ps
-docker compose logs -f
 ```
 
-### 3. Verify Connection
+### 3. Connect
 
 ```bash
-# Connect with redis-cli
-docker compose exec redis redis-cli -a YOUR_PASSWORD
+# Connect to cache
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD"
 
-# Test
-127.0.0.1:6379> PING
-PONG
-127.0.0.1:6379> SET test "hello"
-OK
-127.0.0.1:6379> GET test
-"hello"
+# Connect to queue
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD"
 ```
 
 ---
@@ -67,110 +85,121 @@ OK
 
 ```
 redis/
-├── docker-compose.yml    # Docker configuration
-├── .env                  # Environment variables (DO NOT COMMIT)
-├── .env.example         # Template for .env
-├── config/
-│   └── redis.conf       # Redis configuration
-└── README.md
+├── docker-compose.yml      # Both Redis services
+├── .env                    # Environment variables (DO NOT COMMIT)
+├── .env.example            # Template for .env
+└── config/
+    ├── redis-cache.conf    # Cache configuration (no persistence)
+    ├── redis-queue.conf    # Queue configuration (full persistence)
+    └── redis.conf          # Legacy single-instance config (unused)
 ```
 
 ---
 
-## Configuration
+## Connection Strings
 
-### Memory Settings
+### Redis Cache (Port 6379)
 
-Adjust in `config/redis.conf`:
+```bash
+# Local connection
+redis://:PASSWORD@localhost:6379
 
-| VPS Size | RAM    | maxmemory | Container limit |
-|----------|--------|-----------|-----------------|
-| Small    | 1-2GB  | 256mb     | 384M            |
-| Medium   | 4-8GB  | 1gb       | 1536M           |
-| Large    | 16GB+  | 4gb       | 5G              |
+# Docker internal (from other containers)
+redis://:PASSWORD@redis-cache:6379
 
-```conf
-# In redis.conf
-maxmemory 1gb
+# With database number
+redis://:PASSWORD@localhost:6379/0
 ```
 
-```yaml
-# In docker-compose.yml
-deploy:
-  resources:
-    limits:
-      memory: 1536M  # maxmemory + ~50% overhead
-```
+### Redis Queue (Port 6380)
 
-### Eviction Policies
+```bash
+# Local connection
+redis://:PASSWORD@localhost:6380
 
-```conf
-# For cache (recommended)
-maxmemory-policy allkeys-lru
+# Docker internal (from other containers)
+redis://:PASSWORD@redis-queue:6379
 
-# For persistent data (returns error when full)
-maxmemory-policy noeviction
-
-# For sessions (keys with TTL only)
-maxmemory-policy volatile-lru
-```
-
-### Persistence
-
-Current config uses **hybrid persistence** (RDB + AOF):
-
-```conf
-# RDB snapshots
-save 900 1      # Save after 15 min if 1 key changed
-save 300 10     # Save after 5 min if 10 keys changed
-save 60 10000   # Save after 1 min if 10000 keys changed
-
-# AOF (Append Only File)
-appendonly yes
-appendfsync everysec  # Sync every second
-```
-
-**Disable persistence** (for pure cache):
-```conf
-save ""
-appendonly no
+# With database number
+redis://:PASSWORD@localhost:6380/0
 ```
 
 ---
 
-## Security
+## Backend Usage
 
-### Disabled Commands
+### Node.js with ioredis
 
-These dangerous commands are disabled by default:
+```typescript
+import Redis from 'ioredis';
 
-| Command | Status |
-|---------|--------|
-| FLUSHDB | Disabled |
-| FLUSHALL | Disabled |
-| DEBUG | Disabled |
-| CONFIG | Renamed |
-| SHUTDOWN | Renamed |
+// Cache connection (volatile)
+const cacheRedis = new Redis({
+  host: 'localhost',
+  port: 6379,
+  password: process.env.REDIS_CACHE_PASSWORD,
+});
 
-To use renamed commands:
-```bash
-# CONFIG is renamed to CONFIG_b4c9a2f8e7d1
-redis-cli -a PASSWORD CONFIG_b4c9a2f8e7d1 GET maxmemory
+// Queue connection (persistent)
+const queueRedis = new Redis({
+  host: 'localhost',
+  port: 6380,
+  password: process.env.REDIS_QUEUE_PASSWORD,
+});
+
+// Use cache for temporary data
+await cacheRedis.setex('api:users:123', 300, JSON.stringify(userData));
+
+// Use queue for job data (handled by BullMQ internally)
 ```
 
-### Network Security
+### BullMQ
 
-Restrict access with firewall:
-```bash
-# Allow only from specific IPs
-sudo firewall-cmd --permanent --add-rich-rule='rule family="ipv4" source address="10.0.0.0/8" port port="6379" protocol="tcp" accept'
-sudo firewall-cmd --reload
+```typescript
+import { Queue, Worker } from 'bullmq';
+
+const connection = {
+  host: 'localhost',
+  port: 6380,  // Queue Redis, NOT cache
+  password: process.env.REDIS_QUEUE_PASSWORD,
+};
+
+// Create queue
+const emailQueue = new Queue('email', { connection });
+
+// Add job
+await emailQueue.add('send-welcome', {
+  to: 'user@example.com',
+  template: 'welcome',
+});
+
+// Process jobs
+const worker = new Worker('email', async (job) => {
+  await sendEmail(job.data);
+}, { connection });
 ```
 
-Or bind to localhost only in `docker-compose.yml`:
-```yaml
-ports:
-  - "127.0.0.1:6379:6379"
+### NestJS with @nestjs/bullmq
+
+```typescript
+// app.module.ts
+import { BullModule } from '@nestjs/bullmq';
+
+@Module({
+  imports: [
+    BullModule.forRoot({
+      connection: {
+        host: 'localhost',
+        port: 6380,
+        password: process.env.REDIS_QUEUE_PASSWORD,
+      },
+    }),
+    BullModule.registerQueue({
+      name: 'email',
+    }),
+  ],
+})
+export class AppModule {}
 ```
 
 ---
@@ -180,225 +209,150 @@ ports:
 ### Health Check
 
 ```bash
-# Container health
-docker inspect redis --format='{{.State.Health.Status}}'
+# Check both instances
+docker compose ps
 
-# Redis info
-docker compose exec redis redis-cli -a PASSWORD INFO
+# Check cache
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD" ping
+
+# Check queue
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" ping
 ```
 
 ### Memory Usage
 
 ```bash
-docker compose exec redis redis-cli -a PASSWORD INFO memory
+# Cache memory
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD" INFO memory
+
+# Queue memory
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" INFO memory
 ```
 
-Key metrics:
-- `used_memory_human`: Current memory usage
-- `used_memory_peak_human`: Peak memory usage
-- `maxmemory_human`: Memory limit
+### Key Statistics
+
+```bash
+# Cache stats
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD" INFO stats
+
+# Queue stats
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" INFO stats
+```
 
 ### Slow Queries
 
 ```bash
-# View slow queries (> 10ms)
-docker compose exec redis redis-cli -a PASSWORD SLOWLOG GET 10
-```
+# Cache slow log
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD" SLOWLOG GET 10
 
-### Connected Clients
-
-```bash
-docker compose exec redis redis-cli -a PASSWORD CLIENT LIST
-```
-
-### Statistics
-
-```bash
-# All stats
-docker compose exec redis redis-cli -a PASSWORD INFO stats
-
-# Key metrics
-docker compose exec redis redis-cli -a PASSWORD INFO keyspace
+# Queue slow log
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" SLOWLOG GET 10
 ```
 
 ---
 
-## Backup & Restore
+## Backups
 
-### Manual Backup
+### Queue Redis (Important!)
 
-```bash
-# Trigger RDB save
-docker compose exec redis redis-cli -a PASSWORD BGSAVE_b4c9a2f8e7d1
-
-# Copy RDB file
-docker cp redis:/data/dump.rdb ./backups/dump_$(date +%Y%m%d).rdb
-```
-
-### Automated Backup (Cron)
+Queue data must be backed up. Backups are handled by the centralized backup system.
 
 ```bash
-crontab -e
-
-# Daily backup at 3 AM
-0 3 * * * docker cp redis:/data/dump.rdb /path/to/backups/dump_$(date +\%Y\%m\%d).rdb
+# See ../backup/README.md for documentation
+../backup/scripts/backup-redis.sh
 ```
 
-### Restore
+### Cache Redis
 
-```bash
-# Stop Redis
-docker compose down
-
-# Copy backup to volume
-docker run --rm -v redis_data:/data -v $(pwd)/backups:/backups alpine \
-  cp /backups/dump_20250101.rdb /data/dump.rdb
-
-# Start Redis
-docker compose up -d
-```
+Cache doesn't need backups - data is volatile and can be regenerated.
 
 ---
 
-## Connection Strings
+## Configuration Tuning
 
-### Application
+### Memory Settings
 
-```
-redis://:PASSWORD@localhost:6379/0
-```
+Edit `config/redis-cache.conf` or `config/redis-queue.conf`:
 
-### Docker Internal
+| VPS RAM | Cache maxmemory | Queue maxmemory |
+|---------|-----------------|-----------------|
+| 2GB | 256mb | 256mb |
+| 4GB | 512mb | 512mb |
+| 8GB | 1gb | 1gb |
+| 16GB+ | 2-4gb | 2-4gb |
 
-```
-redis://:PASSWORD@redis:6379/0
-```
+### Resource Limits
 
-### With Database Number
+Edit `docker-compose.yml`:
 
-```
-redis://:PASSWORD@localhost:6379/1
-```
-
-### Node.js Example
-
-```javascript
-const Redis = require('ioredis');
-const redis = new Redis({
-  host: 'localhost',
-  port: 6379,
-  password: 'YOUR_PASSWORD',
-  db: 0,
-});
-```
-
-### Python Example
-
-```python
-import redis
-r = redis.Redis(
-    host='localhost',
-    port=6379,
-    password='YOUR_PASSWORD',
-    db=0,
-    decode_responses=True
-)
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '2'      # Adjust based on VPS
+      memory: 1G     # maxmemory + ~50% overhead
 ```
 
 ---
 
 ## Troubleshooting
 
-### Connection Refused
+### OOM (Out of Memory) - Cache
+
+Cache will evict old keys automatically (LRU). If you see evictions:
 
 ```bash
-# Check if container is running
-docker compose ps
-
-# Check logs
-docker compose logs redis
-
-# Test connection
-docker compose exec redis redis-cli -a PASSWORD PING
+# Check evicted keys
+docker compose exec redis-cache redis-cli -a "$REDIS_CACHE_PASSWORD" INFO stats | grep evicted
 ```
 
-### Out of Memory
+If too many evictions, increase `maxmemory` in `redis-cache.conf`.
+
+### OOM (Out of Memory) - Queue
+
+Queue returns errors instead of evicting. This means your queue is too full.
 
 ```bash
 # Check memory usage
-docker compose exec redis redis-cli -a PASSWORD INFO memory
-
-# Check eviction stats
-docker compose exec redis redis-cli -a PASSWORD INFO stats | grep evicted
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" INFO memory | grep used_memory_human
 ```
 
-If `evicted_keys` is high, increase `maxmemory` or change eviction policy.
+Solutions:
+1. Increase `maxmemory` in `redis-queue.conf`
+2. Process jobs faster (add more workers)
+3. Reduce job payload sizes
+4. Clean up completed/failed jobs
 
-### Slow Performance
+### Connection Refused
 
 ```bash
-# Check slow queries
-docker compose exec redis redis-cli -a PASSWORD SLOWLOG GET 20
+# Check containers are running
+docker compose ps
 
-# Check client connections
-docker compose exec redis redis-cli -a PASSWORD CLIENT LIST | wc -l
-
-# Check if persistence is causing issues
-docker compose exec redis redis-cli -a PASSWORD INFO persistence
+# Check logs
+docker compose logs redis-cache
+docker compose logs redis-queue
 ```
 
-### Data Loss After Restart
+### Persistence Issues (Queue)
 
-Ensure persistence is enabled:
-```conf
-# In redis.conf
-appendonly yes
-save 900 1
-```
-
-Check if data directory has proper permissions:
 ```bash
-docker compose exec redis ls -la /data
-```
+# Check AOF status
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" INFO persistence
 
----
-
-## Performance Tuning
-
-### For High Traffic
-
-```conf
-# In redis.conf - enable I/O threads
-io-threads 4
-io-threads-do-reads yes
-```
-
-### For Large Keys
-
-```conf
-# Increase client buffer
-client-output-buffer-limit normal 256mb 128mb 60
-```
-
-### TCP Tuning
-
-On the host:
-```bash
-# Increase somaxconn
-echo 'net.core.somaxconn=65535' | sudo tee -a /etc/sysctl.conf
-sudo sysctl -p
+# Check last save time
+docker compose exec redis-queue redis-cli -a "$REDIS_QUEUE_PASSWORD" LASTSAVE
 ```
 
 ---
 
 ## Security Checklist
 
-- [ ] Strong password (32+ characters)
-- [ ] .env not in version control
-- [ ] Firewall restricts Redis port
-- [ ] Dangerous commands disabled
-- [ ] Not exposed to public internet
-- [ ] TLS enabled for remote connections (optional)
+- [ ] Strong passwords (32+ characters) for both instances
+- [ ] `.env` not in version control
+- [ ] Firewall restricts Redis ports (6379, 6380)
+- [ ] Different passwords for cache and queue
+- [ ] Queue Redis included in backup strategy
 
 ---
 
@@ -415,5 +369,5 @@ Add to `.gitignore`:
 ## Support
 
 - [Redis Documentation](https://redis.io/docs/)
-- [Redis Configuration](https://redis.io/docs/management/config/)
-- [Docker Hub - Redis](https://hub.docker.com/_/redis)
+- [BullMQ Documentation](https://docs.bullmq.io/)
+- [ioredis Documentation](https://github.com/redis/ioredis)
