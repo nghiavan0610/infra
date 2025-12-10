@@ -1,0 +1,9 @@
+[
+  {
+    "targets": ["qdrant:6333"],
+    "labels": {
+      "service": "qdrant",
+      "job": "qdrant"
+    }
+  }
+]

@@ -1,0 +1,71 @@
+# =============================================================================
+# Fail2ban Jail Configuration
+# =============================================================================
+
+[DEFAULT]
+# Ban for 1 hour
+bantime = 3600
+
+# 10 minute window
+findtime = 600
+
+# 5 retries before ban
+maxretry = 5
+
+# Ignore local IPs
+ignoreip = 127.0.0.1/8 ::1
+
+# Ban action (iptables)
+banaction = iptables-multiport
+
+# -----------------------------------------------------------------------------
+# SSH Protection
+# -----------------------------------------------------------------------------
+[sshd]
+enabled = true
+port = ssh
+filter = sshd
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 86400
+
+# -----------------------------------------------------------------------------
+# Traefik Protection (if using Traefik)
+# -----------------------------------------------------------------------------
+[traefik-auth]
+enabled = true
+port = http,https
+filter = traefik-auth
+logpath = /var/log/traefik/access.log
+maxretry = 5
+findtime = 300
+bantime = 3600
+
+# -----------------------------------------------------------------------------
+# Nginx Protection (if using Nginx)
+# -----------------------------------------------------------------------------
+[nginx-http-auth]
+enabled = false
+port = http,https
+filter = nginx-http-auth
+logpath = /var/log/nginx/error.log
+maxretry = 5
+
+[nginx-botsearch]
+enabled = false
+port = http,https
+filter = nginx-botsearch
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+# -----------------------------------------------------------------------------
+# Docker Container Auth Failures
+# -----------------------------------------------------------------------------
+[docker-auth]
+enabled = true
+port = http,https
+filter = docker-auth
+logpath = /var/lib/docker/containers/*/*-json.log
+maxretry = 5
+findtime = 300
+bantime = 3600

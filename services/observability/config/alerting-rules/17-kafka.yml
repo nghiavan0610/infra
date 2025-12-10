@@ -1,0 +1,101 @@
+# =============================================================================
+# Kafka Alerting Rules
+# =============================================================================
+
+groups:
+  - name: kafka
+    rules:
+      # -----------------------------------------
+      # Availability Alerts
+      # -----------------------------------------
+      - alert: KafkaDown
+        expr: up{job="kafka"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka broker down"
+          description: "Kafka broker {{ $labels.instance }} is down"
+
+      # -----------------------------------------
+      # Topic/Partition Alerts
+      # -----------------------------------------
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicamanager_underreplicatedpartitions > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka under-replicated partitions"
+          description: "Kafka {{ $labels.instance }} has {{ $value }} under-replicated partitions"
+
+      - alert: KafkaOfflinePartitions
+        expr: kafka_controller_kafkacontroller_offlinepartitionscount > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka offline partitions"
+          description: "Kafka {{ $labels.instance }} has {{ $value }} offline partitions"
+
+      # -----------------------------------------
+      # Consumer Lag Alerts
+      # -----------------------------------------
+      - alert: KafkaConsumerLagHigh
+        expr: kafka_consumer_group_lag > 10000
+        for: 10m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has lag of {{ $value }}"
+
+      - alert: KafkaConsumerLagCritical
+        expr: kafka_consumer_group_lag > 100000
+        for: 5m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka consumer lag critical"
+          description: "Consumer group {{ $labels.consumergroup }} on topic {{ $labels.topic }} has lag of {{ $value }}"
+
+      # -----------------------------------------
+      # ISR Alerts
+      # -----------------------------------------
+      - alert: KafkaISRShrink
+        expr: increase(kafka_server_replicamanager_isrshrinks_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: kafka
+        annotations:
+          summary: "Kafka ISR shrinking"
+          description: "Kafka {{ $labels.instance }} ISR is shrinking"
+
+      # -----------------------------------------
+      # Resource Alerts
+      # -----------------------------------------
+      - alert: KafkaActiveControllerCount
+        expr: sum(kafka_controller_kafkacontroller_activecontrollercount) != 1
+        for: 1m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka no active controller"
+          description: "Kafka cluster has {{ $value }} active controllers (should be 1)"
+
+      - alert: KafkaBrokerCountLow
+        expr: count(kafka_server_replicamanager_leadercount) < 1
+        for: 5m
+        labels:
+          severity: critical
+          service: kafka
+        annotations:
+          summary: "Kafka broker count low"
+          description: "Only {{ $value }} Kafka brokers available"

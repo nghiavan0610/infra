@@ -1,0 +1,115 @@
+# =============================================================================
+# Tempo Configuration - Production
+# Distributed tracing backend
+# =============================================================================
+
+server:
+  http_listen_port: 3200
+  log_level: warn
+
+# -----------------------------------------------------------------------------
+# Distributor - Receives traces
+# -----------------------------------------------------------------------------
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+# -----------------------------------------------------------------------------
+# Ingester - Writes traces to storage
+# -----------------------------------------------------------------------------
+ingester:
+  trace_idle_period: 30s
+  max_block_bytes: 5_000_000       # 5MB
+  max_block_duration: 5m
+  flush_check_period: 10s
+
+# -----------------------------------------------------------------------------
+# Compactor - Compacts and manages retention
+# -----------------------------------------------------------------------------
+compactor:
+  compaction:
+    compaction_window: 1h
+    max_block_bytes: 100_000_000   # 100MB
+    block_retention: 72h           # 3 days retention
+    compacted_block_retention: 1h
+
+# -----------------------------------------------------------------------------
+# Storage Configuration
+# -----------------------------------------------------------------------------
+storage:
+  trace:
+    backend: local
+    block:
+      bloom_filter_false_positive: 0.05
+      v2_index_downsample_bytes: 1000
+      v2_encoding: zstd
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+    pool:
+      max_workers: 100
+      queue_depth: 10000
+
+# -----------------------------------------------------------------------------
+# Querier Configuration
+# -----------------------------------------------------------------------------
+querier:
+  search:
+    prefer_self: 10
+  frontend_worker:
+    frontend_address: localhost:9095
+  max_concurrent_queries: 20
+
+# -----------------------------------------------------------------------------
+# Query Frontend
+# -----------------------------------------------------------------------------
+query_frontend:
+  search:
+    concurrent_jobs: 2000
+    max_duration: 0s
+
+# -----------------------------------------------------------------------------
+# Metrics Generator - Generate metrics from traces
+# -----------------------------------------------------------------------------
+metrics_generator:
+  registry:
+    external_labels:
+      source: tempo
+      cluster: production
+  storage:
+    path: /var/tempo/generator/wal
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+  processor:
+    service_graphs:
+      dimensions:
+        - service.namespace
+        - service.name
+    span_metrics:
+      dimensions:
+        - service.namespace
+        - service.name
+        - http.method
+        - http.status_code
+
+# -----------------------------------------------------------------------------
+# Overrides - Per-tenant settings
+# -----------------------------------------------------------------------------
+overrides:
+  defaults:
+    metrics_generator:
+      processors:
+        - service-graphs
+        - span-metrics
+    ingestion:
+      rate_limit_bytes: 15000000     # 15MB/s
+      burst_size_bytes: 20000000     # 20MB burst
+    global:
+      max_traces_per_user: 100000

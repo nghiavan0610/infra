@@ -1,0 +1,14 @@
+# Environment file (contains secrets)
+.env
+
+# Kafka data
+kafka-data/
+zookeeper-data/
+kraft-data/
+
+# Logs
+logs/
+
+# Certificates (keep ca-certificate.crt if needed)
+certs/*.key
+certs/*.pem

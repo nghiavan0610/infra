@@ -1,0 +1,115 @@
+# =============================================================================
+# Traefik Reverse Proxy - Production Configuration
+# =============================================================================
+# Features:
+#   - Automatic Let's Encrypt SSL certificates
+#   - Docker service auto-discovery
+#   - Security headers & rate limiting
+#   - Dashboard with authentication
+#   - Access logging
+#
+# Usage:
+#   cp .env.example .env    # Configure your settings
+#   docker compose up -d    # Start Traefik
+#
+# Add services by adding labels to their docker-compose:
+#   labels:
+#     - "traefik.enable=true"
+#     - "traefik.http.routers.myapp.rule=Host(`app.example.com`)"
+#     - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
+# =============================================================================
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      # HTTP (redirects to HTTPS)
+      - "80:80"
+      # HTTPS
+      - "443:443"
+      # Dashboard (internal only, accessed via reverse proxy)
+      # - "8080:8080"
+    environment:
+      - TZ=UTC
+      # DNS Challenge credentials (for wildcard certs) - uncomment your provider
+      # Cloudflare
+      - CF_API_EMAIL=${CF_API_EMAIL:-}
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN:-}
+      # DigitalOcean
+      # - DO_AUTH_TOKEN=${DO_AUTH_TOKEN:-}
+      # AWS Route53
+      # - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      # - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+    volumes:
+      # Docker socket for auto-discovery (read-only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Traefik configuration
+      - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./config/dynamic:/etc/traefik/dynamic:ro
+      # SSL certificates storage
+      - ./certs/acme.json:/etc/traefik/acme.json
+      # Access logs
+      - traefik_logs:/var/log/traefik
+    networks:
+      - traefik-public
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Enable Traefik for itself (dashboard)
+      - "traefik.enable=true"
+
+      # Dashboard Router
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`${TRAEFIK_DASHBOARD_HOST:-traefik.localhost}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls=true"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+
+      # Dashboard Authentication (Basic Auth)
+      - "traefik.http.routers.traefik-dashboard.middlewares=dashboard-auth,security-headers,rate-limit"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=${TRAEFIK_DASHBOARD_AUTH}"
+
+      # Healthcheck endpoint (no auth)
+      - "traefik.http.routers.traefik-ping.rule=Host(`${TRAEFIK_DASHBOARD_HOST:-traefik.localhost}`) && Path(`/ping`)"
+      - "traefik.http.routers.traefik-ping.entrypoints=websecure"
+      - "traefik.http.routers.traefik-ping.tls=true"
+      - "traefik.http.routers.traefik-ping.service=ping@internal"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  traefik_logs:
+    driver: local
+    name: traefik_logs
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  traefik-public:
+    external: true
+    name: traefik-public

@@ -1,0 +1,141 @@
+# =============================================================================
+# Redis Alerts
+# =============================================================================
+# Toggle: ALERTS_REDIS=true in .env
+# Disable: Rename to 05-redis.yml.disabled
+
+groups:
+  - name: redis
+    interval: 30s
+    rules:
+      # Redis Down
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      # Redis High Memory Usage
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}% of max memory."
+
+      # Redis Memory Critical
+      - alert: RedisMemoryCritical
+        expr: redis_memory_used_bytes / redis_memory_max_bytes * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis memory critical"
+          description: "Redis {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}% of max memory. Eviction/OOM imminent."
+
+      # Redis Too Many Connections
+      - alert: RedisTooManyConnections
+        expr: redis_connected_clients / redis_config_maxclients * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis too many connections"
+          description: "Redis {{ $labels.instance }} has {{ printf \"%.1f\" $value }}% of max connections used."
+
+      # Redis Blocked Clients
+      - alert: RedisBlockedClients
+        expr: redis_blocked_clients > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis has blocked clients"
+          description: "Redis {{ $labels.instance }} has {{ $value }} blocked clients."
+
+      # Redis Rejected Connections
+      - alert: RedisRejectedConnections
+        expr: rate(redis_rejected_connections_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis rejecting connections"
+          description: "Redis {{ $labels.instance }} is rejecting {{ printf \"%.2f\" $value }} connections per second."
+
+      # Redis High Latency
+      - alert: RedisHighLatency
+        expr: redis_commands_duration_seconds_total / redis_commands_processed_total > 0.001
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high command latency"
+          description: "Redis {{ $labels.instance }} average command latency is {{ printf \"%.3f\" $value }} seconds."
+
+      # Redis Replication Broken
+      - alert: RedisReplicationBroken
+        expr: redis_connected_slaves < 1
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis replication broken"
+          description: "Redis master {{ $labels.instance }} has no connected replicas."
+
+      # Redis RDB Snapshot Failed
+      - alert: RedisRDBSnapshotFailed
+        expr: redis_rdb_last_bgsave_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis RDB snapshot failed"
+          description: "Redis {{ $labels.instance }} last RDB snapshot failed."
+
+      # Redis AOF Rewrite Failed
+      - alert: RedisAOFRewriteFailed
+        expr: redis_aof_last_rewrite_status == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis AOF rewrite failed"
+          description: "Redis {{ $labels.instance }} last AOF rewrite failed."
+
+      # Redis High Key Eviction Rate
+      - alert: RedisHighEvictionRate
+        expr: rate(redis_evicted_keys_total[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high key eviction rate"
+          description: "Redis {{ $labels.instance }} is evicting {{ printf \"%.1f\" $value }} keys per second."
+
+      # Redis Cluster Slots Fail
+      - alert: RedisClusterSlotsUnassigned
+        expr: redis_cluster_slots_fail > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis cluster has failing slots"
+          description: "Redis cluster has {{ $value }} failing slots."

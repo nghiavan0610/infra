@@ -1,0 +1,68 @@
+services:
+  # ===========================================================================
+  # Crowdsec - Security Engine
+  # ===========================================================================
+  crowdsec:
+    image: crowdsecurity/crowdsec:latest
+    container_name: crowdsec
+    restart: unless-stopped
+    volumes:
+      - ./config/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - ./data:/var/lib/crowdsec/data
+      - ./config:/etc/crowdsec
+      # Log sources
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    environment:
+      - TZ=UTC
+      - COLLECTIONS=${COLLECTIONS:-crowdsecurity/linux crowdsecurity/traefik}
+      - GID=1000
+    ports:
+      - "127.0.0.1:${CROWDSEC_API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "cscli", "version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-512m}
+          cpus: "${CPU_LIMIT:-1}"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - crowdsec-net
+
+  # ===========================================================================
+  # Traefik Bouncer - Blocks bad IPs at Traefik level
+  # ===========================================================================
+  traefik-bouncer:
+    image: fbonalair/traefik-crowdsec-bouncer:latest
+    container_name: crowdsec-traefik-bouncer
+    restart: unless-stopped
+    environment:
+      - CROWDSEC_BOUNCER_API_KEY=${BOUNCER_KEY_TRAEFIK}
+      - CROWDSEC_AGENT_HOST=crowdsec:8080
+      - GIN_MODE=release
+    depends_on:
+      crowdsec:
+        condition: service_healthy
+    networks:
+      - crowdsec-net
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.25"
+
+networks:
+  crowdsec-net:
+    driver: bridge
+    name: crowdsec-net

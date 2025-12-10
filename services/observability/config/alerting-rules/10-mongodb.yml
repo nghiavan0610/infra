@@ -1,0 +1,185 @@
+# =============================================================================
+# MongoDB Alerting Rules
+# =============================================================================
+# Alerts for MongoDB database monitoring.
+# Requires: mongodb_exporter (https://github.com/percona/mongodb_exporter)
+#
+# Default metrics endpoint: http://mongodb-exporter:9216/metrics
+# =============================================================================
+
+groups:
+  - name: mongodb
+    rules:
+      # =========================================================================
+      # Availability
+      # =========================================================================
+      - alert: MongoDBDown
+        expr: up{job="mongodb"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB exporter is down"
+          description: "MongoDB exporter {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: MongoDBReplicaSetMemberDown
+        expr: mongodb_rs_members_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB replica set member is down"
+          description: "MongoDB replica set member {{ $labels.member_idx }} on {{ $labels.instance }} is down."
+
+      - alert: MongoDBReplicaSetNoPrimary
+        expr: mongodb_rs_members_state{member_state="PRIMARY"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB replica set has no primary"
+          description: "MongoDB replica set {{ $labels.instance }} has no primary node."
+
+      # =========================================================================
+      # Replication
+      # =========================================================================
+      - alert: MongoDBReplicationLag
+        expr: mongodb_rs_members_optimeDate{member_state="SECONDARY"} - on() mongodb_rs_members_optimeDate{member_state="PRIMARY"} > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB replication lag is high"
+          description: "MongoDB secondary {{ $labels.instance }} is lagging {{ $value }} seconds behind primary."
+
+      - alert: MongoDBReplicationLagCritical
+        expr: mongodb_rs_members_optimeDate{member_state="SECONDARY"} - on() mongodb_rs_members_optimeDate{member_state="PRIMARY"} > 60
+        for: 2m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB replication lag critical"
+          description: "MongoDB secondary {{ $labels.instance }} is lagging {{ $value }} seconds behind primary. Immediate attention required."
+
+      # =========================================================================
+      # Connections
+      # =========================================================================
+      - alert: MongoDBConnectionsHigh
+        expr: mongodb_ss_connections{conn_type="current"} > 5000
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB too many connections"
+          description: "MongoDB {{ $labels.instance }} has {{ $value }} connections (threshold: 5000)."
+
+      - alert: MongoDBConnectionsCritical
+        expr: |
+          mongodb_ss_connections{conn_type="current"} / mongodb_ss_connections{conn_type="available"} * 100 > 80
+        for: 2m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB connections near limit"
+          description: "MongoDB {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}% of available connections."
+
+      # =========================================================================
+      # Operations
+      # =========================================================================
+      - alert: MongoDBSlowQueries
+        expr: rate(mongodb_ss_opcounters_total{op_type="query"}[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB high query rate"
+          description: "MongoDB {{ $labels.instance }} is processing {{ printf \"%.0f\" $value }} queries/sec."
+
+      - alert: MongoDBCursorsOpen
+        expr: mongodb_ss_metrics_cursor_open{csr_type="total"} > 10000
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB too many open cursors"
+          description: "MongoDB {{ $labels.instance }} has {{ $value }} open cursors. Check for cursor leaks."
+
+      - alert: MongoDBCursorsTimedOut
+        expr: rate(mongodb_ss_metrics_cursor_timedOut[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB cursors timing out"
+          description: "MongoDB {{ $labels.instance }} has {{ printf \"%.1f\" $value }} cursor timeouts/sec."
+
+      # =========================================================================
+      # Memory
+      # =========================================================================
+      - alert: MongoDBMemoryHigh
+        expr: |
+          mongodb_ss_mem_resident / 1024 / 1024 / 1024 > 28
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB memory usage high"
+          description: "MongoDB {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}GB of resident memory."
+
+      - alert: MongoDBCacheEvictions
+        expr: rate(mongodb_ss_wt_cache_eviction_pages_evicted_total[5m]) > 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB cache eviction rate high"
+          description: "MongoDB {{ $labels.instance }} is evicting {{ printf \"%.0f\" $value }} cache pages/sec. Consider increasing cache size."
+
+      # =========================================================================
+      # Storage
+      # =========================================================================
+      - alert: MongoDBStorageSizeGrowing
+        expr: |
+          (mongodb_ss_wt_block_manager_bytes_currently_in_cache - mongodb_ss_wt_block_manager_bytes_currently_in_cache offset 1h) / 1024 / 1024 / 1024 > 5
+        for: 10m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB storage growing rapidly"
+          description: "MongoDB {{ $labels.instance }} storage has grown by {{ printf \"%.1f\" $value }}GB in the last hour."
+
+      # =========================================================================
+      # Asserts & Errors
+      # =========================================================================
+      - alert: MongoDBAsserts
+        expr: rate(mongodb_ss_asserts_total{assert_type=~"regular|warning|msg|user"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          category: mongodb
+        annotations:
+          summary: "MongoDB asserts detected"
+          description: "MongoDB {{ $labels.instance }} has {{ printf \"%.1f\" $value }} {{ $labels.assert_type }} asserts/sec."
+
+      - alert: MongoDBRollbacks
+        expr: rate(mongodb_ss_asserts_total{assert_type="rollovers"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: mongodb
+        annotations:
+          summary: "MongoDB rollbacks detected"
+          description: "MongoDB {{ $labels.instance }} is experiencing rollbacks. Data consistency may be affected."

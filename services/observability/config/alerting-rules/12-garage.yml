@@ -1,0 +1,195 @@
+# =============================================================================
+# Garage Alerting Rules
+# =============================================================================
+# Alerts for Garage S3-compatible distributed storage.
+# Requires: Garage with admin API enabled for metrics
+#
+# Default metrics endpoint: http://garage:3903/metrics
+# Enable in garage.toml:
+#   [admin]
+#   api_bind_addr = "0.0.0.0:3903"
+# =============================================================================
+
+groups:
+  - name: garage
+    rules:
+      # =========================================================================
+      # Availability
+      # =========================================================================
+      - alert: GarageDown
+        expr: up{job="garage"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage node is down"
+          description: "Garage node {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: GarageClusterNodeDown
+        expr: garage_cluster_nodes_up < garage_cluster_nodes_configured
+        for: 2m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage cluster node down"
+          description: "Garage cluster has {{ $value }} nodes up but {{ $labels.configured }} configured."
+
+      # =========================================================================
+      # Storage Health
+      # =========================================================================
+      - alert: GarageDiskUsageHigh
+        expr: |
+          garage_data_partition_bytes_used / garage_data_partition_bytes_total * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage disk usage high"
+          description: "Garage node {{ $labels.instance }} disk usage is {{ printf \"%.1f\" $value }}%."
+
+      - alert: GarageDiskUsageCritical
+        expr: |
+          garage_data_partition_bytes_used / garage_data_partition_bytes_total * 100 > 90
+        for: 2m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage disk usage critical"
+          description: "Garage node {{ $labels.instance }} disk usage is {{ printf \"%.1f\" $value }}%. Add storage urgently."
+
+      - alert: GarageMetadataPartitionHigh
+        expr: |
+          garage_metadata_partition_bytes_used / garage_metadata_partition_bytes_total * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage metadata partition usage high"
+          description: "Garage node {{ $labels.instance }} metadata partition is {{ printf \"%.1f\" $value }}% full."
+
+      # =========================================================================
+      # Replication & Sync
+      # =========================================================================
+      - alert: GarageReplicationLag
+        expr: garage_replication_queue_length > 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage replication queue growing"
+          description: "Garage node {{ $labels.instance }} has {{ $value }} items in replication queue."
+
+      - alert: GarageReplicationLagCritical
+        expr: garage_replication_queue_length > 10000
+        for: 5m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage replication queue critical"
+          description: "Garage node {{ $labels.instance }} has {{ $value }} items in replication queue. May indicate network or node issues."
+
+      - alert: GarageSyncErrors
+        expr: rate(garage_sync_errors_total[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage sync errors detected"
+          description: "Garage node {{ $labels.instance }} is experiencing {{ printf \"%.1f\" $value }} sync errors/sec."
+
+      # =========================================================================
+      # S3 API Performance
+      # =========================================================================
+      - alert: GarageS3ErrorRateHigh
+        expr: |
+          sum(rate(garage_api_request_counter{status=~"5.."}[5m])) by (instance)
+          /
+          sum(rate(garage_api_request_counter[5m])) by (instance)
+          * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage S3 API error rate high"
+          description: "Garage {{ $labels.instance }} S3 API has {{ printf \"%.1f\" $value }}% error rate."
+
+      - alert: GarageS3LatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum(rate(garage_api_request_duration_seconds_bucket[5m])) by (le, instance)) > 2
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage S3 API latency high"
+          description: "Garage {{ $labels.instance }} P95 latency is {{ printf \"%.2f\" $value }}s."
+
+      - alert: GarageS3LatencyCritical
+        expr: |
+          histogram_quantile(0.95, sum(rate(garage_api_request_duration_seconds_bucket[5m])) by (le, instance)) > 10
+        for: 2m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage S3 API latency critical"
+          description: "Garage {{ $labels.instance }} P95 latency is {{ printf \"%.2f\" $value }}s. Storage may be overloaded."
+
+      # =========================================================================
+      # Bucket Operations
+      # =========================================================================
+      - alert: GaragePutRequestsHigh
+        expr: |
+          sum(rate(garage_api_request_counter{api_endpoint=~".*Put.*"}[5m])) by (instance) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage high PUT request rate"
+          description: "Garage {{ $labels.instance }} is receiving {{ printf \"%.0f\" $value }} PUT requests/sec."
+
+      - alert: GarageGetRequestsHigh
+        expr: |
+          sum(rate(garage_api_request_counter{api_endpoint=~".*Get.*"}[5m])) by (instance) > 5000
+        for: 5m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage high GET request rate"
+          description: "Garage {{ $labels.instance }} is receiving {{ printf \"%.0f\" $value }} GET requests/sec."
+
+      # =========================================================================
+      # Block Operations
+      # =========================================================================
+      - alert: GarageBlockResyncQueueGrowing
+        expr: |
+          garage_block_resync_queue_length > 0
+          and delta(garage_block_resync_queue_length[10m]) > 100
+        for: 10m
+        labels:
+          severity: warning
+          category: garage
+        annotations:
+          summary: "Garage block resync queue growing"
+          description: "Garage {{ $labels.instance }} resync queue is growing. Current: {{ $value }}."
+
+      - alert: GarageBlockCorruption
+        expr: rate(garage_block_corruption_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          category: garage
+        annotations:
+          summary: "Garage block corruption detected"
+          description: "Garage {{ $labels.instance }} is detecting corrupted blocks. Data integrity at risk."

@@ -1,0 +1,25 @@
+# =============================================================================
+# Systemd Backup Timer
+# =============================================================================
+# Runs daily at 2:00 AM
+#
+# Check status: systemctl status backup.timer
+# View logs:    journalctl -u backup.service
+# Run manually: systemctl start backup.service
+# =============================================================================
+
+[Unit]
+Description=Daily Infrastructure Backup Timer
+
+[Timer]
+# Run daily at 2:00 AM
+OnCalendar=*-*-* 02:00:00
+
+# Add randomized delay up to 30 minutes to prevent thundering herd
+RandomizedDelaySec=1800
+
+# Run immediately if last run was missed (e.g., server was off)
+Persistent=true
+
+[Install]
+WantedBy=timers.target

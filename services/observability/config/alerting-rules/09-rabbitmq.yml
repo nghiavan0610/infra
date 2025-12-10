@@ -1,0 +1,203 @@
+# =============================================================================
+# RabbitMQ Alerting Rules
+# =============================================================================
+# Alerts for RabbitMQ message broker monitoring.
+# Requires: RabbitMQ with prometheus plugin enabled (rabbitmq_prometheus)
+#
+# Enable plugin: rabbitmq-plugins enable rabbitmq_prometheus
+# Metrics endpoint: http://rabbitmq:15692/metrics
+# =============================================================================
+
+groups:
+  - name: rabbitmq
+    rules:
+      # =========================================================================
+      # Availability
+      # =========================================================================
+      - alert: RabbitMQDown
+        expr: up{job="rabbitmq"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ instance is down"
+          description: "RabbitMQ instance {{ $labels.instance }} has been down for more than 1 minute."
+
+      - alert: RabbitMQNodeNotDistributed
+        expr: erlang_vm_dist_node_state < 1
+        for: 2m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ node not distributed"
+          description: "RabbitMQ node {{ $labels.instance }} is not connected to the cluster."
+
+      # =========================================================================
+      # Queue Health
+      # =========================================================================
+      - alert: RabbitMQQueueMessagesHigh
+        expr: rabbitmq_queue_messages > 10000
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ queue has too many messages"
+          description: "Queue {{ $labels.queue }} on {{ $labels.instance }} has {{ $value }} messages (threshold: 10000)."
+
+      - alert: RabbitMQQueueMessagesCritical
+        expr: rabbitmq_queue_messages > 50000
+        for: 2m
+        labels:
+          severity: critical
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ queue message count critical"
+          description: "Queue {{ $labels.queue }} on {{ $labels.instance }} has {{ $value }} messages. Immediate attention required."
+
+      - alert: RabbitMQUnackedMessagesHigh
+        expr: rabbitmq_queue_messages_unacked > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ high unacknowledged messages"
+          description: "Queue {{ $labels.queue }} has {{ $value }} unacknowledged messages. Consumers may be slow or stuck."
+
+      - alert: RabbitMQQueueGrowing
+        expr: |
+          (rabbitmq_queue_messages - rabbitmq_queue_messages offset 10m) > 1000
+          and rabbitmq_queue_messages > 5000
+        for: 10m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ queue is growing"
+          description: "Queue {{ $labels.queue }} has grown by {{ $value }} messages in 10 minutes. Check consumer health."
+
+      # =========================================================================
+      # Consumer Health
+      # =========================================================================
+      - alert: RabbitMQNoConsumers
+        expr: rabbitmq_queue_consumers == 0 and rabbitmq_queue_messages > 0
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ queue has no consumers"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages but no consumers."
+
+      - alert: RabbitMQConsumersDown
+        expr: |
+          (rabbitmq_queue_consumers - rabbitmq_queue_consumers offset 5m) < -2
+          and rabbitmq_queue_consumers < 2
+        for: 2m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ consumers dropping"
+          description: "Queue {{ $labels.queue }} lost consumers. Current: {{ $value }}."
+
+      # =========================================================================
+      # Connection & Channel Health
+      # =========================================================================
+      - alert: RabbitMQConnectionsHigh
+        expr: rabbitmq_connections > 1000
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ too many connections"
+          description: "RabbitMQ {{ $labels.instance }} has {{ $value }} connections. Check for connection leaks."
+
+      - alert: RabbitMQChannelsHigh
+        expr: rabbitmq_channels > 2000
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ too many channels"
+          description: "RabbitMQ {{ $labels.instance }} has {{ $value }} channels. Check for channel leaks."
+
+      # =========================================================================
+      # Memory & Disk
+      # =========================================================================
+      - alert: RabbitMQMemoryAlarmOn
+        expr: rabbitmq_alarms_memory_used_watermark == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ memory alarm triggered"
+          description: "RabbitMQ {{ $labels.instance }} has triggered memory alarm. Publishing is blocked."
+
+      - alert: RabbitMQDiskAlarmOn
+        expr: rabbitmq_alarms_free_disk_space_watermark == 1
+        for: 1m
+        labels:
+          severity: critical
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ disk alarm triggered"
+          description: "RabbitMQ {{ $labels.instance }} has triggered disk alarm. Publishing is blocked."
+
+      - alert: RabbitMQMemoryHigh
+        expr: |
+          rabbitmq_process_resident_memory_bytes / rabbitmq_resident_memory_limit_bytes * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ memory usage high"
+          description: "RabbitMQ {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}% of memory limit."
+
+      # =========================================================================
+      # File Descriptors
+      # =========================================================================
+      - alert: RabbitMQFileDescriptorsHigh
+        expr: |
+          rabbitmq_process_open_fds / rabbitmq_process_max_fds * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ file descriptors running low"
+          description: "RabbitMQ {{ $labels.instance }} is using {{ printf \"%.1f\" $value }}% of available file descriptors."
+
+      # =========================================================================
+      # Message Rates
+      # =========================================================================
+      - alert: RabbitMQPublishRateDrop
+        expr: |
+          rate(rabbitmq_queue_messages_published_total[5m]) == 0
+          and rabbitmq_queue_messages_published_total offset 30m > 0
+        for: 15m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ publish rate dropped to zero"
+          description: "No messages published to queue {{ $labels.queue }} in the last 15 minutes."
+
+      - alert: RabbitMQDeliveryRateDrop
+        expr: |
+          rate(rabbitmq_queue_messages_delivered_total[5m]) == 0
+          and rabbitmq_queue_messages > 100
+        for: 10m
+        labels:
+          severity: warning
+          category: rabbitmq
+        annotations:
+          summary: "RabbitMQ delivery stopped"
+          description: "Queue {{ $labels.queue }} has {{ $value }} messages but no deliveries in 10 minutes."

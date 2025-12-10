@@ -1,0 +1,57 @@
+# =============================================================================
+# GitLab CI/CD Self-Hosted Runner
+# =============================================================================
+# Runs GitLab CI/CD pipelines on your own infrastructure
+#
+# Setup:
+#   1. Go to GitLab project/group → Settings → CI/CD → Runners → New project runner
+#   2. Copy the registration token
+#   3. Run: docker compose run --rm gitlab-runner register
+#   4. docker compose up -d
+#
+# Usage in .gitlab-ci.yml:
+#   job:
+#     tags:
+#       - self-hosted
+#       - docker
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # GitLab Runner
+  # ===========================================================================
+  gitlab-runner:
+    image: gitlab/gitlab-runner:v17.6.0
+    container_name: gitlab-runner
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    volumes:
+      # Runner configuration
+      - ./config:/etc/gitlab-runner
+      # Docker socket for Docker executor
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${GITLAB_RUNNER_CPU_LIMIT:-2}"
+          memory: ${GITLAB_RUNNER_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

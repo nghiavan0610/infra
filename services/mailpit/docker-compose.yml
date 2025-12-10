@@ -1,0 +1,87 @@
+# =============================================================================
+# Mailpit - Email Testing Server
+# =============================================================================
+# Catches all outgoing emails for testing - no emails actually sent
+#
+# SMTP: localhost:1025 (configure your app to send here)
+# Web UI: http://localhost:8025 (view caught emails)
+#
+# Usage:
+#   docker compose up -d
+# =============================================================================
+
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: mailpit
+    restart: unless-stopped
+    environment:
+      # Timezone
+      TZ: UTC
+      # Web UI auth (optional)
+      MP_UI_AUTH: ${MP_UI_AUTH:-}
+      # SMTP auth (optional)
+      MP_SMTP_AUTH: ${MP_SMTP_AUTH:-}
+      # Max messages to keep
+      MP_MAX_MESSAGES: ${MP_MAX_MESSAGES:-1000}
+      # Database path for persistence
+      MP_DATABASE: /data/mailpit.db
+      # Web UI bind address
+      MP_UI_BIND_ADDR: 0.0.0.0:8025
+      # SMTP bind address
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+    ports:
+      # SMTP server (for your apps to send to)
+      - "${SMTP_PORT:-1025}:1025"
+      # Web UI (view emails)
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+    volumes:
+      - mailpit_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025/api/v1/info"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment labels to enable)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.mailpit.rule=Host(`${MAILPIT_DOMAIN:-mail.example.com}`)"
+    #   - "traefik.http.routers.mailpit.entrypoints=websecure"
+    #   - "traefik.http.routers.mailpit.tls.certresolver=letsencrypt"
+    #   - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
+    networks:
+      - traefik-public
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  mailpit_data:
+    driver: local
+    name: mailpit_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  traefik-public:
+    external: true
+    name: traefik-public

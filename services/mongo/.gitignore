@@ -1,0 +1,19 @@
+# Environment (contains secrets)
+.env
+
+# Data directories
+data/
+
+# Certificates (optional - may want to commit ca.pem for client distribution)
+# Uncomment below to ignore all certs
+# certs/
+
+# Always ignore private keys
+certs/*.key
+certs/keyfile
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

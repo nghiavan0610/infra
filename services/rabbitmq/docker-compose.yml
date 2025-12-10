@@ -1,0 +1,94 @@
+# =============================================================================
+# RabbitMQ - Production Configuration
+# =============================================================================
+# Message broker with management UI and Prometheus metrics
+#
+# Endpoints:
+#   - AMQP:       amqp://localhost:5672
+#   - Management: http://localhost:15672
+#   - Metrics:    http://localhost:15692/metrics (built-in)
+#
+# Usage:
+#   docker compose up -d
+#   curl -u admin:password http://localhost:15672/api/overview
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # RabbitMQ Server
+  # ===========================================================================
+  rabbitmq:
+    image: rabbitmq:4.0-management-alpine
+    container_name: rabbitmq
+    hostname: rabbitmq
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # Credentials
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_ADMIN_USER:-admin}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_ADMIN_PASS}
+      - RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}
+      # Memory management
+      - RABBITMQ_VM_MEMORY_HIGH_WATERMARK=${RABBITMQ_MEMORY_WATERMARK:-0.7}
+    volumes:
+      - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./config/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./config/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_logs:/var/log/rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"             # AMQP
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672" # Management UI
+      - "${RABBITMQ_METRICS_PORT:-15692}:15692"   # Prometheus metrics (built-in)
+      # - "${RABBITMQ_MQTT_PORT:-1883}:1883"      # MQTT (uncomment if needed)
+      # - "${RABBITMQ_STOMP_PORT:-61613}:61613"   # STOMP (uncomment if needed)
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${RABBITMQ_CPU_LIMIT:-2}"
+          memory: ${RABBITMQ_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${RABBITMQ_MEMORY_RESERVATION:-512M}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus auto-discovery (built-in metrics)
+      - "prometheus.scrape=true"
+      - "prometheus.port=15692"
+      - "prometheus.path=/metrics"
+      # Traefik (optional)
+      - "traefik.enable=${RABBITMQ_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.rabbitmq.rule=Host(`${RABBITMQ_DOMAIN:-rabbitmq.localhost}`)"
+      - "traefik.http.routers.rabbitmq.entrypoints=websecure"
+      - "traefik.http.routers.rabbitmq.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rabbitmq.loadbalancer.server.port=15672"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  rabbitmq_data:
+    name: rabbitmq_data
+  rabbitmq_logs:
+    name: rabbitmq_logs
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

@@ -1,0 +1,30 @@
+# Ntfy Server Configuration
+# See: https://docs.ntfy.sh/config/
+
+# Base URL (used in email links, etc.)
+# base-url: "https://ntfy.example.com"
+
+# Cache settings
+cache-file: "/var/cache/ntfy/cache.db"
+cache-duration: "12h"
+
+# Authentication
+auth-file: "/var/lib/ntfy/auth.db"
+auth-default-access: "read-write"
+enable-login: true
+enable-signup: false
+
+# Rate limiting
+visitor-subscription-limit: 30
+visitor-request-limit-burst: 60
+visitor-request-limit-replenish: "5s"
+
+# Attachment settings
+attachment-cache-dir: "/var/cache/ntfy/attachments"
+attachment-total-size-limit: "5G"
+attachment-file-size-limit: "15M"
+attachment-expiry-duration: "3h"
+
+# Logging
+log-level: "info"
+log-format: "text"

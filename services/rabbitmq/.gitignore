@@ -1,0 +1,15 @@
+# Environment file (contains secrets)
+.env
+
+# Data directories
+data/
+logs/
+
+# TLS certificates
+certs/
+*.crt
+*.key
+*.pem
+
+# Backup files
+backups/

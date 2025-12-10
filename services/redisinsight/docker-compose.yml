@@ -1,0 +1,38 @@
+services:
+  redisinsight:
+    image: redis/redisinsight:2.58
+    container_name: redisinsight
+    restart: unless-stopped
+    ports:
+      - "${REDISINSIGHT_PORT:-5540}:5540"
+    volumes:
+      - redisinsight_data:/data
+    environment:
+      - RI_APP_PORT=5540
+      - RI_LOG_LEVEL=${REDISINSIGHT_LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5540/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - infra-network
+      - traefik-public
+    labels:
+      # Traefik configuration (uncomment to expose via reverse proxy)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.redisinsight.rule=Host(`${REDISINSIGHT_DOMAIN}`)"
+      # - "traefik.http.routers.redisinsight.entrypoints=websecure"
+      # - "traefik.http.routers.redisinsight.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.redisinsight.loadbalancer.server.port=5540"
+      - "traefik.enable=false"
+
+volumes:
+  redisinsight_data:
+
+networks:
+  infra-network:
+    external: true
+  traefik-public:
+    external: true

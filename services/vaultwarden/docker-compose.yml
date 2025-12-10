@@ -1,0 +1,60 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    environment:
+      # Domain (required for clients to connect)
+      - DOMAIN=${VAULTWARDEN_DOMAIN:-http://localhost:8222}
+      # Admin token (for admin panel access)
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      # Signup settings
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-true}
+      - SIGNUPS_VERIFY=${VAULTWARDEN_SIGNUPS_VERIFY:-false}
+      - INVITATIONS_ALLOWED=${VAULTWARDEN_INVITATIONS_ALLOWED:-true}
+      # Security
+      - WEBSOCKET_ENABLED=true
+      - LOG_LEVEL=${VAULTWARDEN_LOG_LEVEL:-info}
+      # Email (optional)
+      - SMTP_HOST=${VAULTWARDEN_SMTP_HOST:-}
+      - SMTP_PORT=${VAULTWARDEN_SMTP_PORT:-587}
+      - SMTP_FROM=${VAULTWARDEN_SMTP_FROM:-}
+      - SMTP_SECURITY=${VAULTWARDEN_SMTP_SECURITY:-starttls}
+      - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME:-}
+      - SMTP_PASSWORD=${VAULTWARDEN_SMTP_PASSWORD:-}
+    ports:
+      - "${VAULTWARDEN_PORT:-8222}:80"
+      - "${VAULTWARDEN_WS_PORT:-3012}:3012"
+    volumes:
+      - vaultwarden_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/alive"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - infra-network
+      - traefik-public
+    labels:
+      # Traefik configuration (uncomment to expose via reverse proxy)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.vaultwarden.rule=Host(`${VAULTWARDEN_HOST}`)"
+      # - "traefik.http.routers.vaultwarden.entrypoints=websecure"
+      # - "traefik.http.routers.vaultwarden.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.vaultwarden.loadbalancer.server.port=80"
+      # WebSocket support
+      # - "traefik.http.routers.vaultwarden-ws.rule=Host(`${VAULTWARDEN_HOST}`) && Path(`/notifications/hub`)"
+      # - "traefik.http.routers.vaultwarden-ws.entrypoints=websecure"
+      # - "traefik.http.routers.vaultwarden-ws.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.vaultwarden-ws.loadbalancer.server.port=3012"
+      - "traefik.enable=false"
+
+volumes:
+  vaultwarden_data:
+
+networks:
+  infra-network:
+    external: true
+  traefik-public:
+    external: true

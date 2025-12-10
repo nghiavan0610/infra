@@ -1,0 +1,79 @@
+# =============================================================================
+# Container Alerts (cAdvisor)
+# =============================================================================
+# Toggle: ALERTS_CONTAINERS=true in .env
+# Disable: Rename to 02-containers.yml.disabled
+
+groups:
+  - name: containers
+    interval: 30s
+    rules:
+      # Container CPU Usage High
+      - alert: ContainerHighCPU
+        expr: sum(rate(container_cpu_usage_seconds_total{name!=""}[5m])) by (name) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high CPU usage"
+          description: "Container {{ $labels.name }} is using {{ printf \"%.1f\" $value }}% CPU."
+
+      # Container Memory Usage High
+      - alert: ContainerHighMemory
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} high memory usage"
+          description: "Container {{ $labels.name }} is using {{ printf \"%.1f\" $value }}% of its memory limit."
+
+      # Container Memory Approaching Limit
+      - alert: ContainerMemoryNearLimit
+        expr: (container_memory_usage_bytes{name!=""} / container_spec_memory_limit_bytes{name!=""}) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Container {{ $labels.name }} memory near limit"
+          description: "Container {{ $labels.name }} is using {{ printf \"%.1f\" $value }}% of its memory limit. OOM kill imminent."
+
+      # Container Restart
+      - alert: ContainerRestarted
+        expr: increase(container_last_seen{name!=""}[5m]) < 0 or rate(container_start_time_seconds{name!=""}[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} restarted"
+          description: "Container {{ $labels.name }} has restarted."
+
+      # Container Not Running
+      - alert: ContainerNotRunning
+        expr: absent(container_last_seen{name=~"prometheus|loki|tempo|grafana|otel-collector|node-exporter|cadvisor"})
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Expected container is not running"
+          description: "One or more expected observability containers are not running."
+
+      # Container Network Errors
+      - alert: ContainerNetworkErrors
+        expr: rate(container_network_receive_errors_total{name!=""}[5m]) > 0 or rate(container_network_transmit_errors_total{name!=""}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} network errors"
+          description: "Container {{ $labels.name }} is experiencing network errors."
+
+      # Container Throttled
+      - alert: ContainerCPUThrottled
+        expr: rate(container_cpu_cfs_throttled_seconds_total{name!=""}[5m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container {{ $labels.name }} CPU throttled"
+          description: "Container {{ $labels.name }} is being CPU throttled."

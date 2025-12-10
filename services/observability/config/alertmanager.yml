@@ -1,0 +1,90 @@
+# =============================================================================
+# Alertmanager Configuration - Production
+# =============================================================================
+# Auto-configured by setup-all.sh to send alerts to ntfy
+# =============================================================================
+
+global:
+  resolve_timeout: 5m
+
+# -----------------------------------------------------------------------------
+# Route Configuration
+# -----------------------------------------------------------------------------
+route:
+  # Default receiver
+  receiver: 'ntfy-all'
+
+  # Group alerts by these labels
+  group_by: ['alertname', 'severity', 'service']
+
+  # Wait before sending first notification
+  group_wait: 30s
+
+  # Wait before sending updated notification
+  group_interval: 5m
+
+  # Wait before re-sending notification
+  repeat_interval: 4h
+
+  # Child routes for specific alert routing
+  routes:
+    # Critical alerts - immediate notification with high priority
+    - match:
+        severity: critical
+      receiver: 'ntfy-critical'
+      group_wait: 10s
+      repeat_interval: 1h
+
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'ntfy-warning'
+      repeat_interval: 4h
+
+# -----------------------------------------------------------------------------
+# Inhibition Rules - Suppress alerts when others are firing
+# -----------------------------------------------------------------------------
+inhibit_rules:
+  # If critical is firing, suppress warning for same alertname
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'service']
+
+# -----------------------------------------------------------------------------
+# Receivers - Ntfy notification channels
+# -----------------------------------------------------------------------------
+receivers:
+  # All alerts (default)
+  - name: 'ntfy-all'
+    webhook_configs:
+      - url: 'http://ntfy:80/alerts'
+        send_resolved: true
+        http_config:
+          headers:
+            Title: '{{ if eq .Status "firing" }}🔥 ALERT{{ else }}✅ RESOLVED{{ end }}: {{ .CommonLabels.alertname }}'
+            Priority: '{{ if eq .CommonLabels.severity "critical" }}urgent{{ else if eq .CommonLabels.severity "warning" }}high{{ else }}default{{ end }}'
+            Tags: '{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "critical" }}skull{{ else }}warning{{ end }}{{ else }}white_check_mark{{ end }}'
+
+  # Critical alerts - urgent priority
+  - name: 'ntfy-critical'
+    webhook_configs:
+      - url: 'http://ntfy:80/alerts-critical'
+        send_resolved: true
+        http_config:
+          headers:
+            Title: '🚨 CRITICAL: {{ .CommonLabels.alertname }}'
+            Priority: 'urgent'
+            Tags: 'rotating_light,skull'
+
+  # Warning alerts - high priority
+  - name: 'ntfy-warning'
+    webhook_configs:
+      - url: 'http://ntfy:80/alerts-warning'
+        send_resolved: true
+        http_config:
+          headers:
+            Title: '⚠️ WARNING: {{ .CommonLabels.alertname }}'
+            Priority: 'high'
+            Tags: 'warning'

@@ -1,0 +1,88 @@
+# =============================================================================
+# GitHub Actions Self-Hosted Runner
+# =============================================================================
+# Runs GitHub Actions workflows on your own infrastructure
+#
+# Setup:
+#   1. Go to GitHub repo/org → Settings → Actions → Runners → New self-hosted runner
+#   2. Copy the registration token
+#   3. Set GITHUB_RUNNER_TOKEN in .env
+#   4. docker compose up -d
+#
+# Usage in workflow:
+#   jobs:
+#     build:
+#       runs-on: self-hosted
+#       # or with labels: runs-on: [self-hosted, linux, x64]
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # GitHub Runner
+  # ===========================================================================
+  github-runner:
+    image: myoung34/github-runner:2.321.0
+    container_name: github-runner
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # Runner registration (REQUIRED)
+      - RUNNER_NAME=${GITHUB_RUNNER_NAME:-self-hosted-runner}
+      - RUNNER_TOKEN=${GITHUB_RUNNER_TOKEN}
+      - RUNNER_WORKDIR=/tmp/runner/work
+      - RUNNER_SCOPE=${GITHUB_RUNNER_SCOPE:-repo}
+      # For repo-level runner
+      - REPO_URL=${GITHUB_REPO_URL}
+      # For org-level runner (use instead of REPO_URL)
+      # - ORG_NAME=${GITHUB_ORG_NAME}
+      # Labels (comma-separated)
+      - LABELS=${GITHUB_RUNNER_LABELS:-self-hosted,linux,x64,docker}
+      # Runner group (for org runners)
+      - RUNNER_GROUP=${GITHUB_RUNNER_GROUP:-default}
+      # Ephemeral mode (runner exits after one job, good for security)
+      - EPHEMERAL=${GITHUB_RUNNER_EPHEMERAL:-false}
+      # Docker-in-Docker support
+      - DOCKER_ENABLED=true
+    volumes:
+      # Docker socket for running containers in workflows
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persistent work directory
+      - github_runner_work:/tmp/runner/work
+      # Tool cache (actions/setup-node, etc.)
+      - github_runner_toolcache:/opt/hostedtoolcache
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${GITHUB_RUNNER_CPU_LIMIT:-2}"
+          memory: ${GITHUB_RUNNER_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus (runner doesn't expose metrics by default)
+      - "prometheus.scrape=false"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  github_runner_work:
+    name: github_runner_work
+  github_runner_toolcache:
+    name: github_runner_toolcache
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

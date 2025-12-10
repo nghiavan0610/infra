@@ -1,0 +1,81 @@
+# =============================================================================
+# Memcached Alerting Rules
+# =============================================================================
+
+groups:
+  - name: memcached
+    rules:
+      # -----------------------------------------
+      # Availability Alerts
+      # -----------------------------------------
+      - alert: MemcachedDown
+        expr: memcached_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: memcached
+        annotations:
+          summary: "Memcached instance down"
+          description: "Memcached instance {{ $labels.instance }} is down"
+
+      # -----------------------------------------
+      # Connection Alerts
+      # -----------------------------------------
+      - alert: MemcachedConnectionsHigh
+        expr: memcached_current_connections / memcached_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: memcached
+        annotations:
+          summary: "Memcached connections high"
+          description: "Memcached {{ $labels.instance }} connections at {{ $value | printf \"%.1f\" }}%"
+
+      # -----------------------------------------
+      # Memory Alerts
+      # -----------------------------------------
+      - alert: MemcachedMemoryHigh
+        expr: memcached_current_bytes / memcached_limit_maxbytes * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+          service: memcached
+        annotations:
+          summary: "Memcached memory usage high"
+          description: "Memcached {{ $labels.instance }} memory at {{ $value | printf \"%.1f\" }}%"
+
+      - alert: MemcachedMemoryCritical
+        expr: memcached_current_bytes / memcached_limit_maxbytes * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          service: memcached
+        annotations:
+          summary: "Memcached memory critical"
+          description: "Memcached {{ $labels.instance }} memory at {{ $value | printf \"%.1f\" }}%"
+
+      # -----------------------------------------
+      # Performance Alerts
+      # -----------------------------------------
+      - alert: MemcachedHitRateLow
+        expr: |
+          rate(memcached_commands_total{command="get",status="hit"}[5m]) /
+          (rate(memcached_commands_total{command="get",status="hit"}[5m]) +
+           rate(memcached_commands_total{command="get",status="miss"}[5m])) * 100 < 80
+        for: 10m
+        labels:
+          severity: warning
+          service: memcached
+        annotations:
+          summary: "Memcached hit rate low"
+          description: "Memcached {{ $labels.instance }} hit rate at {{ $value | printf \"%.1f\" }}%"
+
+      - alert: MemcachedEvictionsHigh
+        expr: rate(memcached_items_evicted_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: memcached
+        annotations:
+          summary: "Memcached evictions high"
+          description: "Memcached {{ $labels.instance }} evicting {{ $value | printf \"%.1f\" }} items/sec"

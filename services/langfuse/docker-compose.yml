@@ -1,0 +1,173 @@
+# =============================================================================
+# LangFuse - LLM Observability Platform
+# =============================================================================
+# Open-source observability & analytics for LLM applications
+#
+# Features:
+#   - Trace LLM calls (latency, tokens, cost)
+#   - Prompt management & versioning
+#   - User feedback & scoring
+#   - Datasets for evaluation
+#
+# Endpoints:
+#   - UI:  http://localhost:3050
+#   - API: http://localhost:3050/api
+#
+# Usage:
+#   docker compose up -d
+#   Open http://localhost:3050 and create account
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # LangFuse Server
+  # ===========================================================================
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: langfuse
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # Database (uses shared PostgreSQL)
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-langfuse}:${LANGFUSE_DB_PASS}@postgres:5432/${LANGFUSE_DB_NAME:-langfuse}
+      # Redis for caching (optional but recommended)
+      - REDIS_HOST=${LANGFUSE_REDIS_HOST:-redis-cache}
+      - REDIS_PORT=${LANGFUSE_REDIS_PORT:-6379}
+      - REDIS_AUTH=${LANGFUSE_REDIS_AUTH:-}
+      # Security
+      - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET}
+      - SALT=${LANGFUSE_SALT}
+      - NEXTAUTH_URL=${LANGFUSE_URL:-http://localhost:3100}
+      - TELEMETRY_ENABLED=${LANGFUSE_TELEMETRY:-false}
+      # Authentication
+      - AUTH_DISABLE_USERNAME_PASSWORD=${LANGFUSE_DISABLE_PASSWORD_AUTH:-false}
+      - AUTH_DISABLE_SIGNUP=${LANGFUSE_DISABLE_SIGNUP:-false}
+      # Optional: SSO (uncomment to enable)
+      # - AUTH_GOOGLE_CLIENT_ID=${LANGFUSE_GOOGLE_CLIENT_ID}
+      # - AUTH_GOOGLE_CLIENT_SECRET=${LANGFUSE_GOOGLE_CLIENT_SECRET}
+      # - AUTH_GITHUB_CLIENT_ID=${LANGFUSE_GITHUB_CLIENT_ID}
+      # - AUTH_GITHUB_CLIENT_SECRET=${LANGFUSE_GITHUB_CLIENT_SECRET}
+      # Optional: S3 for large traces (uncomment to enable)
+      # - LANGFUSE_S3_BUCKET_NAME=${LANGFUSE_S3_BUCKET}
+      # - LANGFUSE_S3_ENDPOINT=${LANGFUSE_S3_ENDPOINT:-http://garage:3900}
+      # - LANGFUSE_S3_ACCESS_KEY_ID=${LANGFUSE_S3_ACCESS_KEY}
+      # - LANGFUSE_S3_SECRET_ACCESS_KEY=${LANGFUSE_S3_SECRET_KEY}
+      # - LANGFUSE_S3_REGION=${LANGFUSE_S3_REGION:-us-east-1}
+      # Performance
+      - LANGFUSE_LOG_LEVEL=${LANGFUSE_LOG_LEVEL:-info}
+      - LANGFUSE_LOG_FORMAT=${LANGFUSE_LOG_FORMAT:-json}
+    ports:
+      - "${LANGFUSE_PORT:-3050}:3000"
+    networks:
+      - infra
+    depends_on:
+      langfuse-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: "${LANGFUSE_CPU_LIMIT:-2}"
+          memory: ${LANGFUSE_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/public/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus (LangFuse exposes metrics)
+      - "prometheus.scrape=true"
+      - "prometheus.port=3000"
+      - "prometheus.path=/api/public/metrics"
+      # Traefik (optional)
+      - "traefik.enable=${LANGFUSE_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.langfuse.rule=Host(`${LANGFUSE_DOMAIN:-langfuse.localhost}`)"
+      - "traefik.http.routers.langfuse.entrypoints=websecure"
+      - "traefik.http.routers.langfuse.tls.certresolver=letsencrypt"
+      - "traefik.http.services.langfuse.loadbalancer.server.port=3000"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================================================
+  # Database Initialization
+  # ===========================================================================
+  langfuse-init:
+    image: postgres:16-alpine
+    container_name: langfuse-init
+    environment:
+      - PGPASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - infra
+    entrypoint: |
+      sh -c '
+        echo "Waiting for PostgreSQL..."
+        until pg_isready -h postgres -U postgres; do
+          sleep 2
+        done
+
+        echo "Checking if database exists..."
+        if ! psql -h postgres -U postgres -lqt | cut -d \| -f 1 | grep -qw ${LANGFUSE_DB_NAME:-langfuse}; then
+          echo "Creating database and user..."
+          psql -h postgres -U postgres <<-EOSQL
+            CREATE USER ${LANGFUSE_DB_USER:-langfuse} WITH PASSWORD '\''${LANGFUSE_DB_PASS}'\'';
+            CREATE DATABASE ${LANGFUSE_DB_NAME:-langfuse} OWNER ${LANGFUSE_DB_USER:-langfuse};
+            GRANT ALL PRIVILEGES ON DATABASE ${LANGFUSE_DB_NAME:-langfuse} TO ${LANGFUSE_DB_USER:-langfuse};
+        EOSQL
+          echo "Database created successfully"
+        else
+          echo "Database already exists"
+        fi
+      '
+    restart: "no"
+
+  # ===========================================================================
+  # LangFuse Worker (for background jobs)
+  # ===========================================================================
+  langfuse-worker:
+    image: langfuse/langfuse:2
+    container_name: langfuse-worker
+    restart: unless-stopped
+    command: ["node", "packages/worker/dist/index.js"]
+    environment:
+      - TZ=UTC
+      - DATABASE_URL=postgresql://${LANGFUSE_DB_USER:-langfuse}:${LANGFUSE_DB_PASS}@postgres:5432/${LANGFUSE_DB_NAME:-langfuse}
+      - REDIS_HOST=${LANGFUSE_REDIS_HOST:-redis-cache}
+      - REDIS_PORT=${LANGFUSE_REDIS_PORT:-6379}
+      - REDIS_AUTH=${LANGFUSE_REDIS_AUTH:-}
+      - LANGFUSE_LOG_LEVEL=${LANGFUSE_LOG_LEVEL:-info}
+      - LANGFUSE_LOG_FORMAT=${LANGFUSE_LOG_FORMAT:-json}
+    networks:
+      - infra
+    depends_on:
+      langfuse:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

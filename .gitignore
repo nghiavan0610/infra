@@ -43,6 +43,11 @@ lerna-debug.log*
 .env.production.local
 .env.local
 
+# Infrastructure shared secrets
+.secrets
+.auth_key
+.password_hash
+
 # temp directory
 .temp
 .tmp
@@ -95,6 +100,10 @@ PERFORMANCE_OPTIMIZATION_README.md
 
 */data
 */certs
+**/backups/
+**/meta/
+**/snapshots/
+**/logs/
 
 *.pem
 *.key

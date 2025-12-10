@@ -1,0 +1,77 @@
+# =============================================================================
+# Qdrant Vector Database - Production Configuration
+# =============================================================================
+# High-performance vector similarity search engine
+#
+# Endpoints:
+#   - REST API:  http://localhost:6333
+#   - gRPC:      localhost:6334
+#   - Metrics:   http://localhost:6333/metrics
+#
+# Usage:
+#   docker compose up -d
+#   curl http://localhost:6333/collections
+# =============================================================================
+
+services:
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: qdrant
+    restart: unless-stopped
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
+      - QDRANT__SERVICE__ENABLE_TLS=${QDRANT_ENABLE_TLS:-false}
+      - QDRANT__LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
+      # Performance tuning
+      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=${QDRANT_MAX_SEARCH_THREADS:-0}
+      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=${QDRANT_INDEXING_THRESHOLD:-20000}
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=${QDRANT_MEMMAP_THRESHOLD:-50000}
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - ./snapshots:/qdrant/snapshots
+      - ./config/config.yaml:/qdrant/config/config.yaml:ro
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${QDRANT_CPU_LIMIT:-2}"
+          memory: ${QDRANT_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${QDRANT_MEMORY_RESERVATION:-512M}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus auto-discovery
+      - "prometheus.scrape=true"
+      - "prometheus.port=6333"
+      - "prometheus.path=/metrics"
+      # Traefik (optional)
+      - "traefik.enable=${QDRANT_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.qdrant.rule=Host(`${QDRANT_DOMAIN:-qdrant.localhost}`)"
+      - "traefik.http.routers.qdrant.entrypoints=websecure"
+      - "traefik.http.routers.qdrant.tls.certresolver=letsencrypt"
+      - "traefik.http.services.qdrant.loadbalancer.server.port=6333"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  qdrant_data:
+    name: qdrant_data
+
+networks:
+  infra:
+    external: true

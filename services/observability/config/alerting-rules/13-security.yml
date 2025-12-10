@@ -1,0 +1,133 @@
+# =============================================================================
+# Security Alerting Rules
+# =============================================================================
+# Alerts for Fail2ban, Crowdsec, and security-related events.
+# =============================================================================
+
+groups:
+  - name: security
+    rules:
+      # =========================================================================
+      # Fail2ban Alerts
+      # =========================================================================
+      - alert: Fail2banDown
+        expr: up{job="fail2ban"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Fail2ban is down"
+          description: "Fail2ban service has been down for more than 5 minutes."
+
+      - alert: Fail2banHighBanRate
+        expr: rate(fail2ban_banned_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High ban rate detected"
+          description: "Fail2ban is banning more than 10 IPs per 5 minutes. Possible attack."
+
+      # =========================================================================
+      # Crowdsec Alerts
+      # =========================================================================
+      - alert: CrowdsecDown
+        expr: up{job="crowdsec"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Crowdsec is down"
+          description: "Crowdsec security engine has been down for more than 5 minutes."
+
+      - alert: CrowdsecHighAlertRate
+        expr: rate(crowdsec_alerts_total[5m]) > 50
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High Crowdsec alert rate"
+          description: "Crowdsec is detecting more than 50 alerts per 5 minutes. Possible attack."
+
+      - alert: CrowdsecBouncerDown
+        expr: crowdsec_bouncer_up == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Crowdsec bouncer is down"
+          description: "Crowdsec bouncer {{ $labels.name }} is not connected. IPs won't be blocked."
+
+      # =========================================================================
+      # Authentik Alerts
+      # =========================================================================
+      - alert: AuthentikDown
+        expr: up{job="authentik"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Authentik is down"
+          description: "Authentik identity provider is down. SSO will not work."
+
+      - alert: AuthentikHighFailedLogins
+        expr: rate(authentik_login_failed_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "High failed login rate"
+          description: "More than 10 failed login attempts per 5 minutes on Authentik."
+
+      # =========================================================================
+      # Vault Alerts
+      # =========================================================================
+      - alert: VaultSealed
+        expr: vault_core_unsealed == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault is sealed"
+          description: "Vault is sealed and cannot serve secrets. Unseal immediately."
+
+      - alert: VaultDown
+        expr: up{job="vault"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault is down"
+          description: "Vault secrets manager is down. Applications may fail to start."
+
+      # =========================================================================
+      # Docker Registry Alerts
+      # =========================================================================
+      - alert: RegistryDown
+        expr: up{job="registry"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Docker Registry is down"
+          description: "Private Docker registry is unreachable. Image pulls/pushes will fail."
+
+      - alert: RegistryStorageHigh
+        expr: registry_storage_used_bytes / registry_storage_total_bytes * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Registry storage high"
+          description: "Docker registry storage is {{ printf \"%.1f\" $value }}% full."

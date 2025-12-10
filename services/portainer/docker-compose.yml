@@ -1,0 +1,40 @@
+services:
+  portainer:
+    image: portainer/portainer-ce:2.20.3-alpine
+    container_name: portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    ports:
+      - "${PORTAINER_PORT:-9443}:9443"     # HTTPS
+      - "${PORTAINER_HTTP_PORT:-9000}:9000" # HTTP (optional)
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    environment:
+      - PORTAINER_ADMIN_PASSWORD=${PORTAINER_ADMIN_PASSWORD:-}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - infra-network
+      - traefik-public
+    labels:
+      # Traefik configuration (uncomment to expose via reverse proxy)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.portainer.rule=Host(`${PORTAINER_DOMAIN}`)"
+      # - "traefik.http.routers.portainer.entrypoints=websecure"
+      # - "traefik.http.routers.portainer.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+      - "traefik.enable=false"
+
+volumes:
+  portainer_data:
+
+networks:
+  infra-network:
+    external: true
+  traefik-public:
+    external: true

@@ -1,0 +1,79 @@
+# =============================================================================
+# Meilisearch - Production Configuration
+# =============================================================================
+# Fast, typo-tolerant search engine
+#
+# Endpoints:
+#   - API:     http://localhost:7700
+#   - Health:  http://localhost:7700/health
+#   - Metrics: http://localhost:7700/metrics
+#
+# Usage:
+#   docker compose up -d
+#   curl http://localhost:7700/health
+# =============================================================================
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.11
+    container_name: meilisearch
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # Security
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY}
+      - MEILI_ENV=${MEILI_ENV:-production}
+      # Performance
+      - MEILI_MAX_INDEXING_MEMORY=${MEILI_MAX_INDEXING_MEMORY:-1Gb}
+      - MEILI_MAX_INDEXING_THREADS=${MEILI_MAX_INDEXING_THREADS:-2}
+      - MEILI_HTTP_PAYLOAD_SIZE_LIMIT=${MEILI_PAYLOAD_SIZE:-100Mb}
+      # Logging
+      - MEILI_LOG_LEVEL=${MEILI_LOG_LEVEL:-INFO}
+      # Experimental features
+      - MEILI_EXPERIMENTAL_ENABLE_METRICS=true
+    volumes:
+      - meilisearch_data:/meili_data
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${MEILI_CPU_LIMIT:-2}"
+          memory: ${MEILI_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${MEILI_MEMORY_RESERVATION:-512M}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:7700/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus auto-discovery
+      - "prometheus.scrape=true"
+      - "prometheus.port=7700"
+      - "prometheus.path=/metrics"
+      # Traefik (optional)
+      - "traefik.enable=${MEILI_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.meilisearch.rule=Host(`${MEILI_DOMAIN:-search.localhost}`)"
+      - "traefik.http.routers.meilisearch.entrypoints=websecure"
+      - "traefik.http.routers.meilisearch.tls.certresolver=letsencrypt"
+      - "traefik.http.services.meilisearch.loadbalancer.server.port=7700"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+volumes:
+  meilisearch_data:
+    name: meilisearch_data
+
+networks:
+  infra:
+    external: true

@@ -1,0 +1,19 @@
+# =============================================================================
+# Backup Cron Schedule
+# =============================================================================
+# Install with: sudo cp backup-cron /etc/cron.d/infra-backup
+# Or add to crontab: crontab -e
+# =============================================================================
+
+# Environment
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Daily full backup at 2:00 AM
+0 2 * * * root /opt/infra/backup/scripts/backup.sh all >> /var/log/backup.log 2>&1
+
+# Hourly database-only backup (optional - uncomment if needed)
+# 0 * * * * root /opt/infra/backup/scripts/backup.sh databases >> /var/log/backup.log 2>&1
+
+# Weekly integrity check on Sunday at 3:00 AM
+0 3 * * 0 root restic check >> /var/log/backup-check.log 2>&1

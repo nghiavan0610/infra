@@ -1,0 +1,111 @@
+# =============================================================================
+# MySQL Alerting Rules
+# =============================================================================
+
+groups:
+  - name: mysql
+    rules:
+      # -----------------------------------------
+      # Availability Alerts
+      # -----------------------------------------
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mysql
+        annotations:
+          summary: "MySQL instance down"
+          description: "MySQL instance {{ $labels.instance }} is down"
+
+      # -----------------------------------------
+      # Connection Alerts
+      # -----------------------------------------
+      - alert: MySQLTooManyConnections
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL too many connections"
+          description: "MySQL {{ $labels.instance }} connections at {{ $value | printf \"%.1f\" }}% of max"
+
+      - alert: MySQLConnectionsExhausted
+        expr: mysql_global_status_threads_connected / mysql_global_variables_max_connections * 100 > 95
+        for: 1m
+        labels:
+          severity: critical
+          service: mysql
+        annotations:
+          summary: "MySQL connections exhausted"
+          description: "MySQL {{ $labels.instance }} connections at {{ $value | printf \"%.1f\" }}% - nearly exhausted"
+
+      # -----------------------------------------
+      # Performance Alerts
+      # -----------------------------------------
+      - alert: MySQLSlowQueries
+        expr: rate(mysql_global_status_slow_queries[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL slow queries detected"
+          description: "MySQL {{ $labels.instance }} has {{ $value | printf \"%.2f\" }} slow queries/sec"
+
+      - alert: MySQLHighThreadsRunning
+        expr: mysql_global_status_threads_running > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL high threads running"
+          description: "MySQL {{ $labels.instance }} has {{ $value }} threads running"
+
+      # -----------------------------------------
+      # Replication Alerts (if using replication)
+      # -----------------------------------------
+      - alert: MySQLReplicationLag
+        expr: mysql_slave_status_seconds_behind_master > 30
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL replication lag"
+          description: "MySQL replica {{ $labels.instance }} is {{ $value }}s behind master"
+
+      - alert: MySQLReplicationNotRunning
+        expr: mysql_slave_status_slave_io_running == 0 or mysql_slave_status_slave_sql_running == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: mysql
+        annotations:
+          summary: "MySQL replication stopped"
+          description: "MySQL replication on {{ $labels.instance }} is not running"
+
+      # -----------------------------------------
+      # InnoDB Alerts
+      # -----------------------------------------
+      - alert: MySQLInnoDBBufferPoolLow
+        expr: mysql_global_status_innodb_buffer_pool_pages_free / mysql_global_status_innodb_buffer_pool_pages_total * 100 < 10
+        for: 10m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL InnoDB buffer pool low"
+          description: "MySQL {{ $labels.instance }} buffer pool only {{ $value | printf \"%.1f\" }}% free"
+
+      - alert: MySQLInnoDBLogWaits
+        expr: rate(mysql_global_status_innodb_log_waits[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: mysql
+        annotations:
+          summary: "MySQL InnoDB log waits"
+          description: "MySQL {{ $labels.instance }} experiencing InnoDB log waits"

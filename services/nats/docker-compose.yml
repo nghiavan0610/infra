@@ -1,0 +1,147 @@
+# =============================================================================
+# NATS Server - Production Configuration
+# =============================================================================
+# High-performance messaging with JetStream persistence
+#
+# Usage:
+#   docker compose up -d                    # Start NATS
+#   docker compose --profile monitoring up -d  # Start with monitoring
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # NATS Server
+  # ===========================================================================
+  nats:
+    image: nats:2.10.24-alpine
+    container_name: nats
+    restart: unless-stopped
+    command: ["-c", "/etc/nats/nats.conf"]
+    ports:
+      - "127.0.0.1:${NATS_PORT:-4222}:4222"           # Client connections (local only)
+      - "127.0.0.1:${NATS_HTTP_PORT:-8222}:8222"      # HTTP monitoring (local only)
+      # - "127.0.0.1:${NATS_CLUSTER_PORT:-6222}:6222" # Cluster (uncomment for HA)
+    volumes:
+      - ./config/nats.conf:/etc/nats/nats.conf:ro
+      - ./config/auth.conf:/etc/nats/auth.conf:ro
+      - nats_data:/data
+      - nats_logs:/var/log/nats
+    environment:
+      - TZ=UTC
+    deploy:
+      resources:
+        limits:
+          cpus: "${NATS_CPU_LIMIT:-2}"
+          memory: ${NATS_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${NATS_MEMORY_RESERVATION:-512M}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment to enable)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.nats-monitor.rule=Host(`${NATS_MONITOR_DOMAIN:-nats.example.com}`)"
+    #   - "traefik.http.routers.nats-monitor.entrypoints=websecure"
+    #   - "traefik.http.routers.nats-monitor.tls.certresolver=letsencrypt"
+    #   - "traefik.http.routers.nats-monitor.middlewares=chain-internal@file"
+    #   - "traefik.http.services.nats-monitor.loadbalancer.server.port=8222"
+    networks:
+      - nats-network
+      # - traefik-public  # Uncomment to enable Traefik
+
+  # ===========================================================================
+  # NATS Surveyor - Prometheus Metrics Exporter (Optional)
+  # ===========================================================================
+  nats-surveyor:
+    image: natsio/nats-surveyor:0.6.0
+    container_name: nats-surveyor
+    restart: unless-stopped
+    command:
+      - "-s=nats://${SURVEYOR_USER:-surveyor}:${SURVEYOR_PASS}@nats:4222"
+      - "-addr=0.0.0.0"
+      - "-port=7777"
+    ports:
+      - "127.0.0.1:${NATS_SURVEYOR_PORT:-7777}:7777"
+    environment:
+      - TZ=UTC
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7777/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      nats:
+        condition: service_healthy
+    networks:
+      - nats-network
+    profiles:
+      - monitoring
+
+  # ===========================================================================
+  # NATS Box - CLI Tools (Optional - for debugging)
+  # ===========================================================================
+  nats-box:
+    image: natsio/nats-box:0.14.3
+    container_name: nats-box
+    command: ["sleep", "infinity"]
+    environment:
+      - NATS_URL=nats://nats:4222
+    networks:
+      - nats-network
+    profiles:
+      - tools
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  nats_data:
+    driver: local
+    name: nats_data
+  nats_logs:
+    driver: local
+    name: nats_logs
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  nats-network:
+    driver: bridge
+    name: nats-network
+  # ---------------------------------------------------------------------------
+  # Traefik Network (uncomment to enable)
+  # ---------------------------------------------------------------------------
+  # traefik-public:
+  #   external: true
+  #   name: traefik-public

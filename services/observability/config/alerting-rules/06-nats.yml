@@ -1,0 +1,97 @@
+# =============================================================================
+# NATS Alerts
+# =============================================================================
+# Toggle: ALERTS_NATS=true in .env
+# Disable: Rename to 06-nats.yml.disabled
+
+groups:
+  - name: nats
+    interval: 30s
+    rules:
+      # NATS Server Down
+      - alert: NATSDown
+        expr: up{job="nats"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: nats
+        annotations:
+          summary: "NATS server is down"
+          description: "NATS server {{ $labels.instance }} has been down for more than 1 minute."
+
+      # NATS High CPU Usage
+      - alert: NATSHighCPU
+        expr: nats_server_cpu > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS high CPU usage"
+          description: "NATS server {{ $labels.instance }} CPU usage is {{ printf \"%.1f\" $value }}%."
+
+      # NATS High Memory Usage
+      - alert: NATSHighMemory
+        expr: nats_server_mem > 1073741824
+        for: 5m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS high memory usage"
+          description: "NATS server {{ $labels.instance }} memory usage is {{ humanize $value }}."
+
+      # NATS Too Many Connections
+      - alert: NATSTooManyConnections
+        expr: nats_server_connections > 8000
+        for: 5m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS too many connections"
+          description: "NATS server {{ $labels.instance }} has {{ $value }} connections (approaching limit)."
+
+      # NATS Slow Consumers
+      - alert: NATSSlowConsumers
+        expr: nats_server_slow_consumers > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS slow consumers detected"
+          description: "NATS server {{ $labels.instance }} has {{ $value }} slow consumers."
+
+      # JetStream Storage High
+      - alert: NATSJetStreamStorageHigh
+        expr: (nats_server_jetstream_filestore_used_bytes / nats_server_jetstream_filestore_reserved_bytes) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS JetStream storage high"
+          description: "NATS JetStream file storage is {{ printf \"%.1f\" $value }}% full."
+
+      # JetStream Memory High
+      - alert: NATSJetStreamMemoryHigh
+        expr: (nats_server_jetstream_memstore_used_bytes / nats_server_jetstream_memstore_reserved_bytes) * 100 > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS JetStream memory high"
+          description: "NATS JetStream memory storage is {{ printf \"%.1f\" $value }}% full."
+
+      # NATS Stream Pending Messages
+      - alert: NATSStreamPendingHigh
+        expr: nats_consumer_pending > 10000
+        for: 10m
+        labels:
+          severity: warning
+          service: nats
+        annotations:
+          summary: "NATS consumer has high pending messages"
+          description: "NATS consumer {{ $labels.consumer }} has {{ $value }} pending messages."

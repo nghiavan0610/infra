@@ -1,0 +1,282 @@
+# =============================================================================
+# MongoDB Replica Set - Production Configuration
+# =============================================================================
+# 3-node replica set: Primary + Secondary + Arbiter
+#
+# Usage:
+#   docker compose up -d                    # Start replica set
+#   docker compose --profile monitoring up -d  # With mongodb_exporter
+#   docker compose --profile init up -d     # Initialize replica set (first time only)
+#
+# After starting, initialize with:
+#   ./scripts/init-replica.sh
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # Primary Node
+  # ---------------------------------------------------------------------------
+  mongo-primary:
+    image: mongo:8.0
+    container_name: mongo-primary
+    hostname: mongo-primary
+    restart: unless-stopped
+    command:
+      - "mongod"
+      - "--replSet"
+      - "${MONGO_REPLICA_SET_NAME:-rs0}"
+      - "--bind_ip_all"
+      - "--port"
+      - "27017"
+      # Authentication
+      - "--keyFile"
+      - "/etc/mongo/certs/keyfile"
+      # TLS Configuration
+      - "--tlsMode"
+      - "${MONGO_TLS_MODE:-requireTLS}"
+      - "--tlsCertificateKeyFile"
+      - "/etc/mongo/certs/mongodb.pem"
+      - "--tlsCAFile"
+      - "/etc/mongo/certs/ca.pem"
+      # WiredTiger cache (in GB)
+      - "--wiredTigerCacheSizeGB"
+      - "${MONGO_PRIMARY_CACHE_SIZE_GB:-0.5}"
+      # Logging
+      - "--quiet"
+    healthcheck:
+      test:
+        - "CMD"
+        - "mongosh"
+        - "--quiet"
+        - "--eval"
+        - "try { rs.status().ok } catch(e) { db.adminCommand('ping').ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "${MONGO_PRIMARY_PORT:-27017}:27017"
+    environment:
+      TZ: UTC
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-primary-data:/data/db
+      - mongo-primary-config:/data/configdb
+      - ./certs/keyfile:/etc/mongo/certs/keyfile:ro
+      - ./certs/mongodb.pem:/etc/mongo/certs/mongodb.pem:ro
+      - ./certs/ca.pem:/etc/mongo/certs/ca.pem:ro
+    networks:
+      - mongo-network
+      - infra           # For access from other infra services
+    deploy:
+      resources:
+        limits:
+          memory: ${MONGO_PRIMARY_MEMORY_LIMIT:-2G}
+        reservations:
+          memory: ${MONGO_PRIMARY_MEMORY_RESERVATION:-512M}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Secondary Node
+  # ---------------------------------------------------------------------------
+  mongo-secondary:
+    image: mongo:8.0
+    container_name: mongo-secondary
+    hostname: mongo-secondary
+    restart: unless-stopped
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+    command:
+      - "mongod"
+      - "--replSet"
+      - "${MONGO_REPLICA_SET_NAME:-rs0}"
+      - "--bind_ip_all"
+      - "--port"
+      - "27017"
+      # Authentication
+      - "--keyFile"
+      - "/etc/mongo/certs/keyfile"
+      # TLS Configuration
+      - "--tlsMode"
+      - "${MONGO_TLS_MODE:-requireTLS}"
+      - "--tlsCertificateKeyFile"
+      - "/etc/mongo/certs/mongodb.pem"
+      - "--tlsCAFile"
+      - "/etc/mongo/certs/ca.pem"
+      # WiredTiger cache (in GB)
+      - "--wiredTigerCacheSizeGB"
+      - "${MONGO_SECONDARY_CACHE_SIZE_GB:-0.5}"
+      # Logging
+      - "--quiet"
+    healthcheck:
+      test:
+        - "CMD"
+        - "mongosh"
+        - "--quiet"
+        - "--eval"
+        - "try { rs.status().ok } catch(e) { db.adminCommand('ping').ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "${MONGO_SECONDARY_PORT:-27018}:27017"
+    environment:
+      TZ: UTC
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      - mongo-secondary-data:/data/db
+      - mongo-secondary-config:/data/configdb
+      - ./certs/keyfile:/etc/mongo/certs/keyfile:ro
+      - ./certs/mongodb.pem:/etc/mongo/certs/mongodb.pem:ro
+      - ./certs/ca.pem:/etc/mongo/certs/ca.pem:ro
+    networks:
+      - mongo-network
+      - infra           # For access from other infra services
+    deploy:
+      resources:
+        limits:
+          memory: ${MONGO_SECONDARY_MEMORY_LIMIT:-2G}
+        reservations:
+          memory: ${MONGO_SECONDARY_MEMORY_RESERVATION:-512M}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ---------------------------------------------------------------------------
+  # Arbiter Node (voting only, no data)
+  # ---------------------------------------------------------------------------
+  mongo-arbiter:
+    image: mongo:8.0
+    container_name: mongo-arbiter
+    hostname: mongo-arbiter
+    restart: unless-stopped
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+    command:
+      - "mongod"
+      - "--replSet"
+      - "${MONGO_REPLICA_SET_NAME:-rs0}"
+      - "--bind_ip_all"
+      - "--port"
+      - "27017"
+      # Authentication
+      - "--keyFile"
+      - "/etc/mongo/certs/keyfile"
+      # TLS Configuration
+      - "--tlsMode"
+      - "${MONGO_TLS_MODE:-requireTLS}"
+      - "--tlsCertificateKeyFile"
+      - "/etc/mongo/certs/mongodb.pem"
+      - "--tlsCAFile"
+      - "/etc/mongo/certs/ca.pem"
+      # Minimal cache for arbiter
+      - "--wiredTigerCacheSizeGB"
+      - "0.1"
+      # Logging
+      - "--quiet"
+    healthcheck:
+      test:
+        - "CMD"
+        - "mongosh"
+        - "--quiet"
+        - "--eval"
+        - "try { rs.status().ok } catch(e) { db.adminCommand('ping').ok }"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    ports:
+      - "${MONGO_ARBITER_PORT:-27019}:27017"
+    environment:
+      TZ: UTC
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_INITDB_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_INITDB_ROOT_PASSWORD}
+    volumes:
+      # Arbiter only needs keyfile for auth, no persistent data
+      - ./certs/keyfile:/etc/mongo/certs/keyfile:ro
+      - ./certs/mongodb.pem:/etc/mongo/certs/mongodb.pem:ro
+      - ./certs/ca.pem:/etc/mongo/certs/ca.pem:ro
+    networks:
+      - mongo-network
+    deploy:
+      resources:
+        limits:
+          memory: ${MONGO_ARBITER_MEMORY_LIMIT:-256M}
+        reservations:
+          memory: ${MONGO_ARBITER_MEMORY_RESERVATION:-64M}
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  # ---------------------------------------------------------------------------
+  # MongoDB Exporter (for Prometheus monitoring)
+  # ---------------------------------------------------------------------------
+  mongodb-exporter:
+    image: percona/mongodb_exporter:0.43
+    container_name: mongodb-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    depends_on:
+      mongo-primary:
+        condition: service_healthy
+    command:
+      - "--mongodb.uri=mongodb://${MONGO_EXPORTER_USERNAME:-exporter}:${MONGO_EXPORTER_PASSWORD}@mongo-primary:27017/admin?replicaSet=${MONGO_REPLICA_SET_NAME:-rs0}&tls=true&tlsCAFile=/etc/mongo/certs/ca.pem&tlsInsecure=true"
+      - "--collect-all"
+      - "--compatible-mode"
+      - "--discovering-mode"
+    ports:
+      - "127.0.0.1:${MONGO_EXPORTER_PORT:-9216}:9216"
+    volumes:
+      - ./certs/ca.pem:/etc/mongo/certs/ca.pem:ro
+    networks:
+      - mongo-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+# -----------------------------------------------------------------------------
+# Volumes
+# -----------------------------------------------------------------------------
+volumes:
+  mongo-primary-data:
+    driver: local
+  mongo-primary-config:
+    driver: local
+  mongo-secondary-data:
+    driver: local
+  mongo-secondary-config:
+    driver: local
+
+# -----------------------------------------------------------------------------
+# Networks
+# -----------------------------------------------------------------------------
+networks:
+  mongo-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+  infra:
+    external: true

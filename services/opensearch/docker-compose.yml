@@ -1,0 +1,132 @@
+# =============================================================================
+# OpenSearch - Production Configuration
+# =============================================================================
+# Distributed search and analytics engine (Elasticsearch fork)
+#
+# Endpoints:
+#   - API:        http://localhost:9200
+#   - Dashboards: http://localhost:5601
+#
+# Usage:
+#   docker compose up -d
+#   curl http://localhost:9200/_cluster/health
+# =============================================================================
+
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: opensearch
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # Cluster settings
+      - cluster.name=${OPENSEARCH_CLUSTER_NAME:-opensearch-cluster}
+      - node.name=opensearch-node1
+      - discovery.type=single-node
+      - network.host=0.0.0.0
+      # Security
+      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-false}
+      # Performance
+      - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP_SIZE:-1g} -Xmx${OPENSEARCH_HEAP_SIZE:-1g}"
+      - bootstrap.memory_lock=true
+      # Plugins
+      - plugins.security.disabled=${OPENSEARCH_DISABLE_SECURITY:-false}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+      - opensearch_logs:/usr/share/opensearch/logs
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+      - "${OPENSEARCH_PERF_PORT:-9600}:9600"
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPENSEARCH_CPU_LIMIT:-2}"
+          memory: ${OPENSEARCH_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${OPENSEARCH_MEMORY_RESERVATION:-1G}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus auto-discovery
+      - "prometheus.scrape=true"
+      - "prometheus.port=9200"
+      - "prometheus.path=/_prometheus/metrics"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.17.1
+    container_name: opensearch-dashboards
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - SERVER_HOST=0.0.0.0
+      - SERVER_NAME=opensearch-dashboards
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-false}
+    ports:
+      - "${OPENSEARCH_DASHBOARDS_PORT:-5601}:5601"
+    networks:
+      - infra
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Traefik (optional)
+      - "traefik.enable=${OPENSEARCH_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.opensearch-dash.rule=Host(`${OPENSEARCH_DOMAIN:-opensearch.localhost}`)"
+      - "traefik.http.routers.opensearch-dash.entrypoints=websecure"
+      - "traefik.http.routers.opensearch-dash.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opensearch-dash.loadbalancer.server.port=5601"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  opensearch_data:
+    name: opensearch_data
+  opensearch_logs:
+    name: opensearch_logs
+
+networks:
+  infra:
+    external: true

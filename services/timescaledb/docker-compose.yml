@@ -1,0 +1,126 @@
+# =============================================================================
+# TimescaleDB Production Configuration
+# =============================================================================
+# Time-series database built on PostgreSQL
+# Optimized for: IoT, metrics, logs, financial data, analytics
+#
+# Usage:
+#   docker compose up -d          # Start TimescaleDB
+#   docker compose logs -f        # View logs
+#   docker compose down           # Stop
+# =============================================================================
+
+services:
+  timescaledb:
+    # -------------------------------------------------------------------------
+    # Image: TimescaleDB HA (includes toolkit, compression, continuous aggs)
+    # -------------------------------------------------------------------------
+    image: timescale/timescaledb-ha:pg17
+    container_name: timescaledb
+    restart: unless-stopped
+
+    # -------------------------------------------------------------------------
+    # Environment Variables
+    # -------------------------------------------------------------------------
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-timeseries}
+      # TimescaleDB specific
+      TIMESCALEDB_TELEMETRY: "off"
+      # Timezone
+      TZ: UTC
+
+    # -------------------------------------------------------------------------
+    # Port Mapping (5433 to avoid conflict with regular PostgreSQL)
+    # -------------------------------------------------------------------------
+    ports:
+      - "127.0.0.1:${TIMESCALE_PORT:-5433}:5432"
+
+    # -------------------------------------------------------------------------
+    # Volume Mounts
+    # -------------------------------------------------------------------------
+    volumes:
+      # Data directory (persistent)
+      - timescaledb_data:/home/postgres/pgdata/data
+      # Configuration
+      - ./config/postgresql.conf:/home/postgres/pgdata/postgresql.conf:ro
+      - ./config/pg_hba.conf:/home/postgres/pgdata/pg_hba.conf:ro
+      # Initialization scripts (run once on first start)
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+
+    # -------------------------------------------------------------------------
+    # Resource Limits (Adjust based on VPS - TimescaleDB needs more resources)
+    # -------------------------------------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G      # Time-series needs more RAM for compression
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+    # -------------------------------------------------------------------------
+    # Health Check
+    # -------------------------------------------------------------------------
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-timeseries}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # -------------------------------------------------------------------------
+    # Security Options
+    # -------------------------------------------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # -------------------------------------------------------------------------
+    # Shared Memory (important for TimescaleDB performance)
+    # -------------------------------------------------------------------------
+    shm_size: 256mb
+
+    # -------------------------------------------------------------------------
+    # Startup Command
+    # -------------------------------------------------------------------------
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/home/postgres/pgdata/postgresql.conf"
+      - "-c"
+      - "hba_file=/home/postgres/pgdata/pg_hba.conf"
+
+    # -------------------------------------------------------------------------
+    # Logging
+    # -------------------------------------------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    # -------------------------------------------------------------------------
+    # Network
+    # -------------------------------------------------------------------------
+    networks:
+      - infra
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  timescaledb_data:
+    name: timescaledb_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

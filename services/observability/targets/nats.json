@@ -1,0 +1,9 @@
+[
+  {
+    "targets": ["host.docker.internal:7777"],
+    "labels": {
+      "service": "nats",
+      "instance_type": "surveyor"
+    }
+  }
+]

@@ -1,0 +1,222 @@
+# =============================================================================
+# Kafka - Production Configuration (KRaft Mode)
+# =============================================================================
+# High-performance event streaming without Zookeeper
+#
+# Endpoints:
+#   - Broker:  localhost:9092 (external clients)
+#   - Internal: kafka:9094 (Docker network)
+#   - UI:      http://localhost:8090
+#   - Metrics: http://localhost:9308/metrics
+#
+# Usage:
+#   docker compose up -d
+#   docker compose --profile ui up -d      # Include Kafka UI
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Kafka Broker (KRaft Mode - Combined Controller + Broker)
+  # ===========================================================================
+  kafka:
+    image: bitnami/kafka:3.9.0
+    container_name: kafka
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      # -----------------------------------------------------------------------
+      # KRaft Configuration (No Zookeeper)
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_NODE_ID=${KAFKA_NODE_ID:-1}
+      - KAFKA_CFG_PROCESS_ROLES=broker,controller
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=${KAFKA_NODE_ID:-1}@kafka:9093
+      - KAFKA_KRAFT_CLUSTER_ID=${KAFKA_CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+      # -----------------------------------------------------------------------
+      # Listeners
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:29092,CONTROLLER://:9093,EXTERNAL://:9092,INTERNAL://:9094
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:29092,EXTERNAL://${KAFKA_ADVERTISED_HOST:-localhost}:${KAFKA_EXTERNAL_PORT:-9092},INTERNAL://kafka:9094
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:${KAFKA_EXTERNAL_PROTOCOL:-PLAINTEXT},INTERNAL:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      # -----------------------------------------------------------------------
+      # Topic Defaults
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_NUM_PARTITIONS=${KAFKA_DEFAULT_PARTITIONS:-3}
+      - KAFKA_CFG_DEFAULT_REPLICATION_FACTOR=${KAFKA_DEFAULT_REPLICATION:-1}
+      - KAFKA_CFG_MIN_INSYNC_REPLICAS=${KAFKA_MIN_ISR:-1}
+      - KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE=${KAFKA_AUTO_CREATE_TOPICS:-false}
+      # -----------------------------------------------------------------------
+      # Replication (for single node, set to 1)
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_OFFSETS_TOPIC_REPLICATION_FACTOR=${KAFKA_OFFSETS_REPLICATION:-1}
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=${KAFKA_TXN_REPLICATION:-1}
+      - KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR=${KAFKA_TXN_MIN_ISR:-1}
+      # -----------------------------------------------------------------------
+      # Log Retention
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_LOG_RETENTION_HOURS=${KAFKA_RETENTION_HOURS:-168}
+      - KAFKA_CFG_LOG_RETENTION_BYTES=${KAFKA_RETENTION_BYTES:-1073741824}
+      - KAFKA_CFG_LOG_SEGMENT_BYTES=${KAFKA_SEGMENT_BYTES:-1073741824}
+      - KAFKA_CFG_LOG_RETENTION_CHECK_INTERVAL_MS=300000
+      - KAFKA_CFG_LOG_CLEANUP_POLICY=delete
+      # -----------------------------------------------------------------------
+      # Performance Tuning
+      # -----------------------------------------------------------------------
+      - KAFKA_CFG_NUM_IO_THREADS=${KAFKA_IO_THREADS:-8}
+      - KAFKA_CFG_NUM_NETWORK_THREADS=${KAFKA_NETWORK_THREADS:-3}
+      - KAFKA_CFG_NUM_RECOVERY_THREADS_PER_DATA_DIR=2
+      - KAFKA_CFG_SOCKET_SEND_BUFFER_BYTES=102400
+      - KAFKA_CFG_SOCKET_RECEIVE_BUFFER_BYTES=102400
+      - KAFKA_CFG_SOCKET_REQUEST_MAX_BYTES=104857600
+      - KAFKA_CFG_MESSAGE_MAX_BYTES=${KAFKA_MAX_MESSAGE_SIZE:-10485760}
+      - KAFKA_CFG_REPLICA_FETCH_MAX_BYTES=${KAFKA_MAX_MESSAGE_SIZE:-10485760}
+      # -----------------------------------------------------------------------
+      # Memory Settings
+      # -----------------------------------------------------------------------
+      - KAFKA_HEAP_OPTS=${KAFKA_HEAP_OPTS:--Xmx2G -Xms2G}
+      # -----------------------------------------------------------------------
+      # JMX for monitoring
+      # -----------------------------------------------------------------------
+      - JMX_PORT=9999
+      - KAFKA_JMX_OPTS=-Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false -Djava.rmi.server.hostname=kafka -Dcom.sun.management.jmxremote.rmi.port=9999
+    volumes:
+      - kafka_data:/bitnami/kafka
+    ports:
+      - "${KAFKA_EXTERNAL_PORT:-9092}:9092"    # External clients
+      - "${KAFKA_INTERNAL_PORT:-9094}:9094"    # Internal (Docker network)
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "${KAFKA_CPU_LIMIT:-4}"
+          memory: ${KAFKA_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "1"
+          memory: 2G
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions.sh --bootstrap-server localhost:29092 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================================================
+  # Kafka Exporter - Prometheus Metrics
+  # ===========================================================================
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.8.0
+    container_name: kafka-exporter
+    restart: unless-stopped
+    command:
+      - --kafka.server=kafka:29092
+      - --web.listen-address=:9308
+      - --topic.filter=.*
+      - --group.filter=.*
+    ports:
+      - "${KAFKA_EXPORTER_PORT:-9308}:9308"
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9308/metrics"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Prometheus auto-discovery
+      - "prometheus.scrape=true"
+      - "prometheus.port=9308"
+      - "prometheus.path=/metrics"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # ===========================================================================
+  # Kafka UI - Web Interface (Optional)
+  # ===========================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - KAFKA_CLUSTERS_0_NAME=${KAFKA_CLUSTER_NAME:-production}
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:29092
+      - KAFKA_CLUSTERS_0_METRICS_PORT=9999
+      - DYNAMIC_CONFIG_ENABLED=true
+      - AUTH_TYPE=${KAFKA_UI_AUTH_TYPE:-DISABLED}
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    networks:
+      - infra
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    labels:
+      # Traefik (optional)
+      - "traefik.enable=${KAFKA_TRAEFIK_ENABLE:-false}"
+      - "traefik.http.routers.kafka-ui.rule=Host(`${KAFKA_UI_DOMAIN:-kafka.localhost}`)"
+      - "traefik.http.routers.kafka-ui.entrypoints=websecure"
+      - "traefik.http.routers.kafka-ui.tls.certresolver=letsencrypt"
+      - "traefik.http.services.kafka-ui.loadbalancer.server.port=8080"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    profiles:
+      - ui
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  kafka_data:
+    name: kafka_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true

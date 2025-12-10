@@ -1,0 +1,8 @@
+# Environment file (contains secrets)
+.env
+
+# Backup logs
+logs/
+
+# Restic cache
+.cache/

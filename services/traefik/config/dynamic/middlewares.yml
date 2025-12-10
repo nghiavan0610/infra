@@ -1,0 +1,200 @@
+# =============================================================================
+# Traefik Dynamic Configuration - Middlewares
+# =============================================================================
+# Reusable middleware configurations for security, rate limiting, etc.
+# Reference in docker labels: middleware-name@file
+# =============================================================================
+
+http:
+  middlewares:
+    # -------------------------------------------------------------------------
+    # Security Headers
+    # -------------------------------------------------------------------------
+    security-headers:
+      headers:
+        # HSTS - Force HTTPS
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+
+        # Prevent clickjacking
+        frameDeny: true
+
+        # XSS Protection
+        browserXssFilter: true
+
+        # Prevent MIME type sniffing
+        contentTypeNosniff: true
+
+        # Referrer Policy
+        referrerPolicy: "strict-origin-when-cross-origin"
+
+        # Content Security Policy (adjust per your needs)
+        # contentSecurityPolicy: "default-src 'self'"
+
+        # Permissions Policy
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+
+        # Custom headers
+        customResponseHeaders:
+          X-Robots-Tag: "noindex, nofollow"
+          Server: ""  # Hide server info
+
+    # -------------------------------------------------------------------------
+    # Security Headers (Relaxed for APIs)
+    # -------------------------------------------------------------------------
+    security-headers-api:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        forceSTSHeader: true
+        contentTypeNosniff: true
+        referrerPolicy: "strict-origin-when-cross-origin"
+        customResponseHeaders:
+          Server: ""
+
+    # -------------------------------------------------------------------------
+    # Rate Limiting - Standard
+    # -------------------------------------------------------------------------
+    rate-limit:
+      rateLimit:
+        average: 100    # requests per second
+        burst: 200      # max burst
+        period: 1s
+
+    # -------------------------------------------------------------------------
+    # Rate Limiting - Strict (for login pages, APIs)
+    # -------------------------------------------------------------------------
+    rate-limit-strict:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1s
+
+    # -------------------------------------------------------------------------
+    # Rate Limiting - Relaxed (for static assets)
+    # -------------------------------------------------------------------------
+    rate-limit-relaxed:
+      rateLimit:
+        average: 500
+        burst: 1000
+        period: 1s
+
+    # -------------------------------------------------------------------------
+    # IP Whitelist (internal services)
+    # -------------------------------------------------------------------------
+    ip-whitelist-internal:
+      ipWhiteList:
+        sourceRange:
+          - "127.0.0.1/32"
+          - "10.0.0.0/8"
+          - "172.16.0.0/12"
+          - "192.168.0.0/16"
+
+    # -------------------------------------------------------------------------
+    # Compress Responses
+    # -------------------------------------------------------------------------
+    compress:
+      compress:
+        excludedContentTypes:
+          - "text/event-stream"
+
+    # -------------------------------------------------------------------------
+    # Redirect www to non-www
+    # -------------------------------------------------------------------------
+    redirect-www-to-non-www:
+      redirectRegex:
+        regex: "^https?://www\\.(.+)"
+        replacement: "https://${1}"
+        permanent: true
+
+    # -------------------------------------------------------------------------
+    # Redirect non-www to www
+    # -------------------------------------------------------------------------
+    redirect-non-www-to-www:
+      redirectRegex:
+        regex: "^https?://(?:www\\.)?(.+)"
+        replacement: "https://www.${1}"
+        permanent: true
+
+    # -------------------------------------------------------------------------
+    # Strip Prefix (for path-based routing)
+    # -------------------------------------------------------------------------
+    strip-api-prefix:
+      stripPrefix:
+        prefixes:
+          - "/api"
+
+    # -------------------------------------------------------------------------
+    # Add Trailing Slash
+    # -------------------------------------------------------------------------
+    add-trailing-slash:
+      redirectRegex:
+        regex: "^(https?://[^/]+/[^?]+[^/?])$"
+        replacement: "${1}/"
+        permanent: true
+
+    # -------------------------------------------------------------------------
+    # Error Pages (custom error handling)
+    # -------------------------------------------------------------------------
+    error-pages:
+      errors:
+        status:
+          - "500-599"
+        service: error-pages@docker
+        query: "/{status}.html"
+
+    # -------------------------------------------------------------------------
+    # Circuit Breaker (prevent cascade failures)
+    # -------------------------------------------------------------------------
+    circuit-breaker:
+      circuitBreaker:
+        expression: "NetworkErrorRatio() > 0.30 || ResponseCodeRatio(500, 600, 0, 600) > 0.25"
+
+    # -------------------------------------------------------------------------
+    # Retry (automatic retries)
+    # -------------------------------------------------------------------------
+    retry:
+      retry:
+        attempts: 3
+        initialInterval: 100ms
+
+    # -------------------------------------------------------------------------
+    # Buffering (for large requests)
+    # -------------------------------------------------------------------------
+    buffering:
+      buffering:
+        maxRequestBodyBytes: 10485760  # 10MB
+        memRequestBodyBytes: 2097152   # 2MB
+        maxResponseBodyBytes: 10485760
+        memResponseBodyBytes: 2097152
+
+    # -------------------------------------------------------------------------
+    # Chain: Standard Web Application
+    # -------------------------------------------------------------------------
+    chain-web:
+      chain:
+        middlewares:
+          - security-headers
+          - rate-limit
+          - compress
+
+    # -------------------------------------------------------------------------
+    # Chain: API Application
+    # -------------------------------------------------------------------------
+    chain-api:
+      chain:
+        middlewares:
+          - security-headers-api
+          - rate-limit
+          - compress
+
+    # -------------------------------------------------------------------------
+    # Chain: Internal Services
+    # -------------------------------------------------------------------------
+    chain-internal:
+      chain:
+        middlewares:
+          - ip-whitelist-internal
+          - security-headers

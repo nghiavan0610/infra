@@ -1,0 +1,39 @@
+services:
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    environment:
+      # Authentication (optional)
+      - DOZZLE_USERNAME=${DOZZLE_USERNAME:-}
+      - DOZZLE_PASSWORD=${DOZZLE_PASSWORD:-}
+      # UI settings
+      - DOZZLE_LEVEL=${DOZZLE_LEVEL:-info}
+      - DOZZLE_TAILSIZE=${DOZZLE_TAILSIZE:-300}
+      - DOZZLE_NO_ANALYTICS=true
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - infra-network
+      - traefik-public
+    labels:
+      # Traefik configuration (uncomment to expose via reverse proxy)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.dozzle.rule=Host(`${DOZZLE_DOMAIN}`)"
+      # - "traefik.http.routers.dozzle.entrypoints=websecure"
+      # - "traefik.http.routers.dozzle.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
+      - "traefik.enable=false"
+
+networks:
+  infra-network:
+    external: true
+  traefik-public:
+    external: true

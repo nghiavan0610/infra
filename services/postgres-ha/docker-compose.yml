@@ -1,0 +1,220 @@
+# =============================================================================
+# PostgreSQL Primary-Replica Setup - Production Configuration
+# =============================================================================
+# Usage:
+#   docker compose up -d                    # Start both master and replica
+#   docker compose logs -f                  # View logs
+#   docker compose ps                       # Check status
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # PostgreSQL Master (Primary)
+  # ===========================================================================
+  postgres-master:
+    image: bitnami/postgresql:17
+    container_name: postgres-master
+    restart: unless-stopped
+
+    # -----------------------------------------
+    # Environment Variables
+    # -----------------------------------------
+    environment:
+      # Replication mode
+      - POSTGRESQL_REPLICATION_MODE=master
+
+      # Admin credentials
+      - POSTGRESQL_POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
+
+      # Application user
+      - POSTGRESQL_USERNAME=${POSTGRES_USERNAME}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE}
+
+      # Replication user
+      - POSTGRESQL_REPLICATION_USER=${POSTGRES_REPLICATION_USERNAME}
+      - POSTGRESQL_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+
+      # Timezone
+      - TZ=UTC
+
+      # TLS (uncomment to enable)
+      # - POSTGRESQL_ENABLE_TLS=yes
+      # - POSTGRESQL_TLS_CERT_FILE=/opt/bitnami/postgresql/certs/server.crt
+      # - POSTGRESQL_TLS_KEY_FILE=/opt/bitnami/postgresql/certs/server.key
+
+    # -----------------------------------------
+    # Volumes
+    # -----------------------------------------
+    volumes:
+      # Data persistence
+      - postgres_master_data:/bitnami/postgresql
+      # Custom configuration
+      - ./config/master-conf/postgresql.conf:/opt/bitnami/postgresql/conf/conf.d/custom.conf:ro
+      - ./config/pg_hba.conf:/opt/bitnami/postgresql/conf/pg_hba.conf:ro
+      # TLS certificates (uncomment if using TLS)
+      # - ./certs:/opt/bitnami/postgresql/certs:ro
+
+    # -----------------------------------------
+    # Ports
+    # -----------------------------------------
+    ports:
+      - "${POSTGRES_MASTER_PORT:-5432}:5432"
+
+    # -----------------------------------------
+    # Resource Limits
+    # -----------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # -----------------------------------------
+    # Health Check
+    # -----------------------------------------
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRESQL_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # -----------------------------------------
+    # Security
+    # -----------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # -----------------------------------------
+    # Logging
+    # -----------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # -----------------------------------------
+    # Network
+    # -----------------------------------------
+    networks:
+      - postgres-network
+
+  # ===========================================================================
+  # PostgreSQL Replica (Read-Only)
+  # ===========================================================================
+  postgres-replica:
+    image: bitnami/postgresql:17
+    container_name: postgres-replica
+    restart: unless-stopped
+    depends_on:
+      postgres-master:
+        condition: service_healthy
+
+    # -----------------------------------------
+    # Environment Variables
+    # -----------------------------------------
+    environment:
+      # Replication mode
+      - POSTGRESQL_REPLICATION_MODE=slave
+
+      # Master connection
+      - POSTGRESQL_MASTER_HOST=postgres-master
+      - POSTGRESQL_MASTER_PORT_NUMBER=5432
+
+      # Admin credentials (must match master)
+      - POSTGRESQL_POSTGRES_PASSWORD=${POSTGRES_ADMIN_PASSWORD}
+
+      # Application user
+      - POSTGRESQL_USERNAME=${POSTGRES_USERNAME}
+      - POSTGRESQL_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRESQL_DATABASE=${POSTGRESQL_DATABASE}
+
+      # Replication user
+      - POSTGRESQL_REPLICATION_USER=${POSTGRES_REPLICATION_USERNAME}
+      - POSTGRESQL_REPLICATION_PASSWORD=${POSTGRES_REPLICATION_PASSWORD}
+
+      # Timezone
+      - TZ=UTC
+
+    # -----------------------------------------
+    # Volumes
+    # -----------------------------------------
+    volumes:
+      # Data persistence for replica
+      - postgres_replica_data:/bitnami/postgresql
+      # Custom configuration
+      - ./config/slave-conf/postgresql.conf:/opt/bitnami/postgresql/conf/conf.d/custom.conf:ro
+      - ./config/pg_hba.conf:/opt/bitnami/postgresql/conf/pg_hba.conf:ro
+
+    # -----------------------------------------
+    # Ports
+    # -----------------------------------------
+    ports:
+      - "${POSTGRES_REPLICA_PORT:-5433}:5432"
+
+    # -----------------------------------------
+    # Resource Limits
+    # -----------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+    # -----------------------------------------
+    # Health Check
+    # -----------------------------------------
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRESQL_DATABASE}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s  # Replica needs more time to sync
+
+    # -----------------------------------------
+    # Security
+    # -----------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # -----------------------------------------
+    # Logging
+    # -----------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # -----------------------------------------
+    # Network
+    # -----------------------------------------
+    networks:
+      - postgres-network
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_master_data:
+    driver: local
+    name: postgres_master_data
+  postgres_replica_data:
+    driver: local
+    name: postgres_replica_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  postgres-network:
+    driver: bridge
+    name: postgres-network

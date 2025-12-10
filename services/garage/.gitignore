@@ -1,0 +1,17 @@
+# Environment file (contains secrets)
+.env
+
+# Data directories
+data/
+meta/
+
+# Generated config (contains secrets)
+config/garage.toml
+config/*.key
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

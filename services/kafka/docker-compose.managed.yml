@@ -1,0 +1,83 @@
+# =============================================================================
+# Kafka UI - Production Configuration
+# =============================================================================
+# Web UI for managed Kafka clusters (DigitalOcean, AWS MSK, Confluent, etc.)
+#
+# Usage:
+#   docker compose up -d              # Start Kafka UI
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Kafka UI - Web Interface for Kafka Management
+  # ===========================================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    restart: unless-stopped
+    ports:
+      - "${KAFKA_UI_PORT:-8080}:8080"
+    environment:
+      - TZ=UTC
+      # Cluster configuration
+      - KAFKA_CLUSTERS_0_NAME=${KAFKA_CLUSTER_NAME:-production}
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=${KAFKA_URL}
+      # SASL/SSL Authentication
+      - KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL=SASL_SSL
+      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM=PLAIN
+      - KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG=org.apache.kafka.common.security.plain.PlainLoginModule required username="${KAFKA_USERNAME}" password="${KAFKA_PASSWORD}";
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_LOCATION=/certs/ca-certificate.crt
+      - KAFKA_CLUSTERS_0_PROPERTIES_SSL_TRUSTSTORE_TYPE=PEM
+      # UI Settings
+      - DYNAMIC_CONFIG_ENABLED=true
+      - AUTH_TYPE=DISABLED
+    volumes:
+      - ./certs:/certs:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "${KAFKA_UI_CPU_LIMIT:-1}"
+          memory: ${KAFKA_UI_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment to enable)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.kafka-ui.rule=Host(`${KAFKA_UI_DOMAIN:-kafka.example.com}`)"
+    #   - "traefik.http.routers.kafka-ui.entrypoints=websecure"
+    #   - "traefik.http.routers.kafka-ui.tls.certresolver=letsencrypt"
+    #   - "traefik.http.routers.kafka-ui.middlewares=chain-internal@file"
+    #   - "traefik.http.services.kafka-ui.loadbalancer.server.port=8080"
+    networks:
+      - kafka-network
+      # - traefik-public  # Uncomment for Traefik
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  kafka-network:
+    driver: bridge
+    name: kafka-network
+  # ---------------------------------------------------------------------------
+  # Traefik Network (uncomment to enable)
+  # ---------------------------------------------------------------------------
+  # traefik-public:
+  #   external: true
+  #   name: traefik-public

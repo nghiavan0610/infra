@@ -1,0 +1,49 @@
+# =============================================================================
+# Observability Stack Alerts
+# =============================================================================
+# Toggle: ALERTS_OBSERVABILITY=true in .env
+# Disable: Rename to 03-observability.yml.disabled
+
+groups:
+  - name: observability-stack
+    interval: 30s
+    rules:
+      # Prometheus Target Down
+      - alert: PrometheusTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Prometheus target {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been down for more than 2 minutes."
+
+      # Prometheus Config Reload Failed
+      - alert: PrometheusConfigReloadFailed
+        expr: prometheus_config_last_reload_successful == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Prometheus config reload failed"
+          description: "Prometheus configuration reload has failed."
+
+      # Loki Request Errors
+      - alert: LokiRequestErrors
+        expr: rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Loki is experiencing errors"
+          description: "Loki has {{ $value }} 5xx errors per second."
+
+      # Tempo Ingester Unhealthy
+      - alert: TempoIngesterUnhealthy
+        expr: tempo_ingester_traces_created_total == 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tempo ingester not receiving traces"
+          description: "Tempo has not ingested any traces in the last 10 minutes."

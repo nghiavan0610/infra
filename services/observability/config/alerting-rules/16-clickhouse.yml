@@ -1,0 +1,94 @@
+# =============================================================================
+# ClickHouse Alerting Rules
+# =============================================================================
+
+groups:
+  - name: clickhouse
+    rules:
+      # -----------------------------------------
+      # Availability Alerts
+      # -----------------------------------------
+      - alert: ClickHouseDown
+        expr: up{job="clickhouse"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse instance down"
+          description: "ClickHouse instance {{ $labels.instance }} is down"
+
+      # -----------------------------------------
+      # Query Alerts
+      # -----------------------------------------
+      - alert: ClickHouseQueriesRunningHigh
+        expr: ClickHouseMetrics_Query > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse many queries running"
+          description: "ClickHouse {{ $labels.instance }} has {{ $value }} queries running"
+
+      - alert: ClickHouseSlowQueries
+        expr: increase(ClickHouseProfileEvents_SlowRead[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse slow queries detected"
+          description: "ClickHouse {{ $labels.instance }} has slow reads"
+
+      # -----------------------------------------
+      # Memory Alerts
+      # -----------------------------------------
+      - alert: ClickHouseMemoryHigh
+        expr: ClickHouseMetrics_MemoryTracking > 8e9
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse memory usage high"
+          description: "ClickHouse {{ $labels.instance }} using {{ $value | humanize }}B memory"
+
+      # -----------------------------------------
+      # Connection Alerts
+      # -----------------------------------------
+      - alert: ClickHouseConnectionsHigh
+        expr: ClickHouseMetrics_TCPConnection > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse connections high"
+          description: "ClickHouse {{ $labels.instance }} has {{ $value }} TCP connections"
+
+      # -----------------------------------------
+      # Replication Alerts (if using replication)
+      # -----------------------------------------
+      - alert: ClickHouseReplicationLag
+        expr: ClickHouseMetrics_ReplicasMaxQueueSize > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse replication lag"
+          description: "ClickHouse {{ $labels.instance }} replication queue: {{ $value }}"
+
+      # -----------------------------------------
+      # Storage Alerts
+      # -----------------------------------------
+      - alert: ClickHousePartsHigh
+        expr: ClickHouseMetrics_MaxPartCountForPartition > 300
+        for: 10m
+        labels:
+          severity: warning
+          service: clickhouse
+        annotations:
+          summary: "ClickHouse too many parts"
+          description: "ClickHouse {{ $labels.instance }} has {{ $value }} parts in a partition"

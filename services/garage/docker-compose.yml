@@ -1,0 +1,58 @@
+services:
+  garage:
+    image: dxflrs/garage:v1.0.1
+    container_name: garage
+    restart: unless-stopped
+    volumes:
+      - ./meta:/var/lib/garage/meta
+      - ./data:/var/lib/garage/data
+      - ./config/garage.toml:/etc/garage.toml:ro
+    ports:
+      - "${GARAGE_S3_API_PORT:-3900}:3900"   # S3 API
+      - "${GARAGE_RPC_PORT:-3901}:3901"      # RPC (inter-node)
+      - "${GARAGE_S3_WEB_PORT:-3902}:3902"   # Web hosting
+      - "${GARAGE_ADMIN_PORT:-3903}:3903"    # Admin + Metrics
+    environment:
+      - TZ=UTC
+      - RUST_LOG=${RUST_LOG:-garage=info}
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${GARAGE_MEMORY_LIMIT:-1g}
+          cpus: "${GARAGE_CPU_LIMIT:-2}"
+        reservations:
+          memory: 256m
+    networks:
+      - garage-net
+
+  # Optional: Web UI for administration
+  webui:
+    image: khairul169/garage-webui:latest
+    container_name: garage-webui
+    restart: unless-stopped
+    profiles:
+      - webui
+    volumes:
+      - ./config/garage.toml:/etc/garage.toml:ro
+    ports:
+      - "${GARAGE_WEB_UI_PORT:-3909}:3909"
+    environment:
+      - TZ=UTC
+      - API_BASE_URL=http://garage:3903
+      - S3_ENDPOINT_URL=http://garage:3900
+      - AUTH_USER_PASS=${GARAGE_WEB_UI_USER:-admin}:${GARAGE_WEB_UI_PASS:-admin}
+    depends_on:
+      garage:
+        condition: service_healthy
+    networks:
+      - garage-net
+
+networks:
+  garage-net:
+    driver: bridge

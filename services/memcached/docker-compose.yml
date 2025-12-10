@@ -1,0 +1,38 @@
+services:
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: memcached
+    restart: unless-stopped
+    command:
+      - memcached
+      - -m ${MEMCACHED_MEMORY:-64}
+      - -c ${MEMCACHED_MAX_CONNECTIONS:-1024}
+      - -t ${MEMCACHED_THREADS:-4}
+      - -v
+    ports:
+      - "${MEMCACHED_PORT:-11211}:11211"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "11211"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - infra-network
+
+  memcached-exporter:
+    image: prom/memcached-exporter:v0.14.3
+    container_name: memcached-exporter
+    restart: unless-stopped
+    command:
+      - --memcached.address=memcached:11211
+    ports:
+      - "${MEMCACHED_EXPORTER_PORT:-9150}:9150"
+    depends_on:
+      memcached:
+        condition: service_healthy
+    networks:
+      - infra-network
+
+networks:
+  infra-network:
+    external: true

@@ -1,0 +1,163 @@
+# =============================================================================
+# PostgreSQL Single Node - Production Configuration
+# =============================================================================
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: postgres
+    restart: unless-stopped
+
+    # ---------------------------------------------
+    # Environment Variables
+    # ---------------------------------------------
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+      # Non-root user for application access
+      POSTGRES_NON_ROOT_USER: ${POSTGRES_NON_ROOT_USER:-}
+      POSTGRES_NON_ROOT_PASSWORD: ${POSTGRES_NON_ROOT_PASSWORD:-}
+      POSTGRES_APP_SCHEMA: ${POSTGRES_APP_SCHEMA:-public}
+      # Timezone
+      TZ: UTC
+
+    # ---------------------------------------------
+    # Port Mapping
+    # ---------------------------------------------
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432" # Only localhost, not public
+
+    # ---------------------------------------------
+    # Volume Mounts
+    # ---------------------------------------------
+    volumes:
+      # Data directory (persistent)
+      - postgres_data:/var/lib/postgresql/data
+      # Configuration files
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      # Initialization scripts (run once on first start)
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+
+    # ---------------------------------------------
+    # Resource Limits (Adjust based on VPS)
+    # ---------------------------------------------
+    deploy:
+      resources:
+        limits:
+          cpus: "2" # Max 2 CPU cores
+          memory: 2G # Max 2GB RAM
+        reservations:
+          cpus: "0.5" # Reserved 0.5 CPU
+          memory: 512M # Reserved 512MB RAM
+
+    # ---------------------------------------------
+    # Health Check
+    # ---------------------------------------------
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # ---------------------------------------------
+    # Security Options
+    # ---------------------------------------------
+    security_opt:
+      - no-new-privileges:true
+
+    # ---------------------------------------------
+    # Startup Command
+    # ---------------------------------------------
+    command:
+      - "postgres"
+      - "-c"
+      - "config_file=/etc/postgresql/postgresql.conf"
+      - "-c"
+      - "hba_file=/etc/postgresql/pg_hba.conf"
+
+    # ---------------------------------------------
+    # Logging
+    # ---------------------------------------------
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # ---------------------------------------------
+    # Network
+    # ---------------------------------------------
+    networks:
+      - postgres_network
+      - infra           # For access from other infra services
+
+  # ===========================================================================
+  # PostgreSQL Exporter - Metrics for Prometheus (optional)
+  # ===========================================================================
+  # Enable with: docker compose --profile monitoring up -d
+  # Then register with observability:
+  #   cd ../../tools/observability && ./scripts/manage-targets.sh add postgres \
+  #     --name postgres-single --host host.docker.internal --port 9187
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-single-exporter
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    environment:
+      - TZ=UTC
+      - DATA_SOURCE_NAME=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
+    ports:
+      - "127.0.0.1:${EXPORTER_PORT:-9187}:9187"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - postgres_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+    driver: local
+    name: postgres_data
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  postgres_network:
+    driver: bridge
+    name: postgres_network
+  infra:
+    external: true

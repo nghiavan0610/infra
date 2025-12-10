@@ -1,0 +1,73 @@
+services:
+  # ===========================================================================
+  # Docker Registry
+  # ===========================================================================
+  registry:
+    image: registry:2
+    container_name: registry
+    restart: unless-stopped
+    volumes:
+      - ./data:/var/lib/registry
+      - ./auth:/auth:ro
+      - ./config.yml:/etc/docker/registry/config.yml:ro
+    ports:
+      - "${REGISTRY_PORT:-5000}:5000"
+    environment:
+      - REGISTRY_AUTH=htpasswd
+      - REGISTRY_AUTH_HTPASSWD_REALM=Registry Realm
+      - REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd
+      - REGISTRY_STORAGE_DELETE_ENABLED=${REGISTRY_STORAGE_DELETE_ENABLED:-true}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5000/v2/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-512m}
+          cpus: "${CPU_LIMIT:-1}"
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - registry-net
+
+  # ===========================================================================
+  # Registry UI (optional)
+  # ===========================================================================
+  registry-ui:
+    image: joxit/docker-registry-ui:latest
+    container_name: registry-ui
+    restart: unless-stopped
+    profiles:
+      - ui
+    ports:
+      - "${REGISTRY_UI_PORT:-5001}:80"
+    environment:
+      - SINGLE_REGISTRY=true
+      - REGISTRY_TITLE=Docker Registry
+      - REGISTRY_URL=http://registry:5000
+      - DELETE_IMAGES=true
+      - SHOW_CONTENT_DIGEST=true
+      - SHOW_CATALOG_NB_TAGS=true
+      - CATALOG_MIN_BRANCHES=1
+      - CATALOG_MAX_BRANCHES=1
+      - TAGLIST_PAGE_SIZE=100
+    depends_on:
+      - registry
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks:
+      - registry-net
+
+networks:
+  registry-net:
+    driver: bridge
+    name: registry-net

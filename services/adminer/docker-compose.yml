@@ -1,0 +1,69 @@
+# =============================================================================
+# Adminer - Database Management UI
+# =============================================================================
+# Lightweight database admin in a single PHP file
+# Supports: PostgreSQL, MySQL, SQLite, MongoDB, etc.
+#
+# Usage:
+#   docker network create traefik-public  # If not using setup-all.sh
+#   docker compose up -d
+#
+# Access: http://localhost:8081
+# =============================================================================
+
+services:
+  adminer:
+    image: adminer:4.8.1
+    container_name: adminer
+    restart: unless-stopped
+    environment:
+      # Default server to connect to
+      ADMINER_DEFAULT_SERVER: ${DEFAULT_DB_HOST:-host.docker.internal}
+      # Design theme
+      ADMINER_DESIGN: ${ADMINER_DESIGN:-pepa-linha-dark}
+      # Plugins to load
+      ADMINER_PLUGINS: ${ADMINER_PLUGINS:-tables-filter tinymce}
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8081}:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "php", "-v"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment labels to enable)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.adminer.rule=Host(`${ADMINER_DOMAIN:-adminer.example.com}`)"
+    #   - "traefik.http.routers.adminer.entrypoints=websecure"
+    #   - "traefik.http.routers.adminer.tls.certresolver=letsencrypt"
+    #   - "traefik.http.routers.adminer.middlewares=adminer-auth"
+    #   - "traefik.http.middlewares.adminer-auth.basicauth.users=${ADMINER_BASIC_AUTH}"
+    #   - "traefik.http.services.adminer.loadbalancer.server.port=8080"
+    networks:
+      - traefik-public
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  traefik-public:
+    external: true
+    name: traefik-public

@@ -1,0 +1,9 @@
+[
+  {
+    "targets": ["langfuse:3000"],
+    "labels": {
+      "service": "langfuse",
+      "job": "langfuse"
+    }
+  }
+]

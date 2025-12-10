@@ -1,0 +1,140 @@
+# =============================================================================
+# Faster-Whisper - Production Speech-to-Text API
+# =============================================================================
+# High-performance speech recognition with OpenAI-compatible API
+#
+# Usage:
+#   cp .env.example .env && nano .env
+#   docker compose up -d
+#
+# With GPU:
+#   docker compose --profile gpu up -d
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # Faster-Whisper Server (CPU)
+  # ===========================================================================
+  faster-whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    container_name: faster-whisper
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - WHISPER__MODEL=${WHISPER_MODEL:-small}
+      - WHISPER__DEVICE=cpu
+      - WHISPER__COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE:-int8}
+    ports:
+      - "127.0.0.1:${WHISPER_PORT:-8000}:8000"
+    volumes:
+      - whisper_models:/root/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          cpus: "${WHISPER_CPU_LIMIT:-4}"
+          memory: ${WHISPER_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "${WHISPER_CPU_RESERVATION:-1}"
+          memory: ${WHISPER_MEMORY_RESERVATION:-1G}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - whisper-network
+      # - traefik-public  # Uncomment for Traefik
+    labels:
+      # Traefik configuration
+      - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      - "traefik.http.routers.whisper.rule=Host(`${WHISPER_DOMAIN:-whisper.localhost}`)"
+      - "traefik.http.routers.whisper.entrypoints=websecure"
+      - "traefik.http.routers.whisper.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.whisper.middlewares=whisper-ratelimit"
+      - "traefik.http.services.whisper.loadbalancer.server.port=8000"
+      # Rate limiting (10 requests per minute)
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.average=10"
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.burst=5"
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.period=1m"
+
+  # ===========================================================================
+  # Faster-Whisper Server (GPU - NVIDIA)
+  # ===========================================================================
+  faster-whisper-gpu:
+    image: fedirz/faster-whisper-server:latest-cuda
+    container_name: faster-whisper
+    restart: unless-stopped
+    profiles:
+      - gpu
+    environment:
+      - TZ=UTC
+      - WHISPER__MODEL=${WHISPER_MODEL_GPU:-large-v3}
+      - WHISPER__DEVICE=cuda
+      - WHISPER__COMPUTE_TYPE=${WHISPER_COMPUTE_TYPE_GPU:-float16}
+    ports:
+      - "127.0.0.1:${WHISPER_PORT:-8000}:8000"
+    volumes:
+      - whisper_models:/root/.cache/huggingface
+    deploy:
+      resources:
+        limits:
+          memory: ${WHISPER_MEMORY_LIMIT_GPU:-12G}
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 180s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - whisper-network
+      # - traefik-public  # Uncomment for Traefik
+    labels:
+      - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      - "traefik.http.routers.whisper.rule=Host(`${WHISPER_DOMAIN:-whisper.localhost}`)"
+      - "traefik.http.routers.whisper.entrypoints=websecure"
+      - "traefik.http.routers.whisper.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.whisper.middlewares=whisper-ratelimit"
+      - "traefik.http.services.whisper.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.average=10"
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.burst=5"
+      - "traefik.http.middlewares.whisper-ratelimit.ratelimit.period=1m"
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  whisper_models:
+    driver: local
+    name: faster_whisper_models
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  whisper-network:
+    driver: bridge
+    name: whisper-network
+  # Uncomment for Traefik integration
+  # traefik-public:
+  #   external: true
+  #   name: traefik-public

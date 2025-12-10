@@ -1,0 +1,69 @@
+# =============================================================================
+# Asynqmon - Task Queue Monitoring Dashboard
+# =============================================================================
+# Web UI for monitoring Asynq tasks (uses Redis as backend)
+#
+# Note: Asynq is a library in your app - this only runs the dashboard.
+# Your application handles task enqueueing and processing.
+#
+# Usage:
+#   docker compose up -d
+#   Open http://localhost:8080
+# =============================================================================
+
+services:
+  asynqmon:
+    image: hibiken/asynqmon:0.7.2
+    platform: linux/amd64
+    container_name: asynqmon
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - REDIS_ADDR=${REDIS_ADDR:-host.docker.internal:6380}
+      - REDIS_DB=${REDIS_DB:-0}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      # Enable read-only mode in production (prevents task deletion from UI)
+      # - READ_ONLY=true
+    ports:
+      - "127.0.0.1:${ASYNQMON_PORT:-8080}:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - asynq-network
+    labels:
+      # Traefik (optional)
+      - "traefik.enable=${TRAEFIK_ENABLED:-false}"
+      - "traefik.http.routers.asynqmon.rule=Host(`${ASYNQMON_DOMAIN:-asynq.localhost}`)"
+      - "traefik.http.routers.asynqmon.entrypoints=websecure"
+      - "traefik.http.routers.asynqmon.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.asynqmon.middlewares=asynqmon-auth"
+      - "traefik.http.services.asynqmon.loadbalancer.server.port=8080"
+      # Basic auth (generate with: htpasswd -nb user password)
+      - "traefik.http.middlewares.asynqmon-auth.basicauth.users=${ASYNQMON_AUTH:-}"
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  asynq-network:
+    driver: bridge
+    name: asynq-network

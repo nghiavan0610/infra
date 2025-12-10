@@ -1,0 +1,85 @@
+# =============================================================================
+# Production Backup Service
+# =============================================================================
+# Automated backup for all databases with:
+# - Selective backup via config/*.json
+# - Ntfy notifications on success/failure
+# - Restic deduplication + encryption
+# - S3 storage (Garage/MinIO)
+# - Configurable retention policy
+# =============================================================================
+
+services:
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: infra-backup:latest
+    container_name: backup
+    restart: unless-stopped
+    hostname: backup
+    env_file:
+      - .env
+    environment:
+      # Restic configuration
+      - RESTIC_REPOSITORY=${RESTIC_REPOSITORY:-s3:http://garage:3900/backups}
+      - RESTIC_PASSWORD=${RESTIC_PASSWORD}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+
+      # Backup schedule (cron format)
+      - BACKUP_SCHEDULE=${BACKUP_SCHEDULE:-0 2 * * *}
+      - RUN_ON_START=${RUN_ON_START:-false}
+      - TZ=${TZ:-UTC}
+
+      # Database credentials (used by backup scripts via password_env)
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - MONGO_PASSWORD=${MONGO_PASSWORD:-}
+
+      # Retention policy
+      - RETENTION_HOURLY=${RETENTION_HOURLY:-24}
+      - RETENTION_DAILY=${RETENTION_DAILY:-7}
+      - RETENTION_WEEKLY=${RETENTION_WEEKLY:-4}
+      - RETENTION_MONTHLY=${RETENTION_MONTHLY:-6}
+      - RETENTION_YEARLY=${RETENTION_YEARLY:-2}
+
+      # Notifications
+      - NTFY_URL=${NTFY_URL:-}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL:-}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+
+      # Backup directory
+      - BACKUP_DIR=/tmp/backups
+      - BACKUP_ROOT=/app
+    volumes:
+      # Mount config for selective backup
+      - ./config:/app/config:ro
+
+      # Logs persistence
+      - ./logs:/app/logs
+
+      # Restic cache for faster incremental backups
+      - backup_cache:/root/.cache/restic
+
+      # Docker socket for volume backups (optional)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - infra-network
+    labels:
+      # Disable watchtower auto-updates for backup container
+      - "com.centurylinklabs.watchtower.enable=false"
+    healthcheck:
+      test: ["CMD", "restic", "version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  backup_cache:
+    name: backup_cache
+
+networks:
+  infra-network:
+    external: true

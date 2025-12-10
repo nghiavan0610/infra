@@ -1,0 +1,126 @@
+# =============================================================================
+# Task Queue Alerts (Asynq/BullMQ)
+# =============================================================================
+# Toggle: ALERTS_TASK_QUEUE=true in .env
+# Disable: Rename to 07-task-queue.yml.disabled
+#
+# Note: These alerts require your application to expose metrics.
+# See asynq/README.md for instrumentation examples.
+
+groups:
+  - name: task-queue
+    interval: 30s
+    rules:
+      # ----- Asynq Alerts (Go) -----
+
+      # Queue size too large (tasks piling up)
+      - alert: TaskQueueBacklog
+        expr: asynq_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "Task queue backlog detected"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending tasks."
+
+      # Queue size critical
+      - alert: TaskQueueBacklogCritical
+        expr: asynq_queue_size > 5000
+        for: 2m
+        labels:
+          severity: critical
+          service: task-queue
+        annotations:
+          summary: "Task queue backlog critical"
+          description: "Queue {{ $labels.queue }} has {{ $value }} pending tasks. Workers may be down."
+
+      # High task failure rate
+      - alert: TaskFailureRateHigh
+        expr: rate(asynq_tasks_failed_total[5m]) / rate(asynq_tasks_processed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "High task failure rate"
+          description: "Task failure rate is {{ printf \"%.1f\" (mul $value 100) }}% for queue {{ $labels.queue }}."
+
+      # Dead tasks (exhausted retries)
+      - alert: TasksInDeadQueue
+        expr: asynq_queue_dead > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "Tasks in dead queue"
+          description: "{{ $value }} tasks have exhausted retries in queue {{ $labels.queue }}."
+
+      # No tasks processed (workers may be down)
+      - alert: TaskWorkersIdle
+        expr: rate(asynq_tasks_processed_total[10m]) == 0 and asynq_queue_size > 0
+        for: 10m
+        labels:
+          severity: critical
+          service: task-queue
+        annotations:
+          summary: "Task workers appear idle"
+          description: "No tasks processed in 10 minutes but queue has {{ $value }} pending tasks."
+
+      # Task processing latency high
+      - alert: TaskProcessingLatencyHigh
+        expr: histogram_quantile(0.95, rate(asynq_task_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "Task processing latency high"
+          description: "95th percentile task duration is {{ printf \"%.1f\" $value }} seconds."
+
+      # Scheduled tasks backlog
+      - alert: ScheduledTasksBacklog
+        expr: asynq_queue_scheduled > 10000
+        for: 10m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "Scheduled tasks backlog"
+          description: "{{ $value }} scheduled tasks waiting in queue {{ $labels.queue }}."
+
+      # Retry queue growing
+      - alert: RetryQueueGrowing
+        expr: asynq_queue_retry > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "Retry queue growing"
+          description: "{{ $value }} tasks waiting for retry in queue {{ $labels.queue }}."
+
+      # ----- BullMQ Alerts (Node.js) -----
+
+      # Queue waiting too long
+      - alert: BullMQQueueBacklog
+        expr: bull_queue_waiting > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "BullMQ queue backlog"
+          description: "Queue {{ $labels.queue }} has {{ $value }} waiting jobs."
+
+      # BullMQ failed jobs
+      - alert: BullMQFailedJobs
+        expr: bull_queue_failed > 100
+        for: 5m
+        labels:
+          severity: warning
+          service: task-queue
+        annotations:
+          summary: "BullMQ failed jobs accumulating"
+          description: "Queue {{ $labels.queue }} has {{ $value }} failed jobs."

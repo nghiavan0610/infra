@@ -1,0 +1,516 @@
+# =============================================================================
+# Observability Stack - Production Configuration
+# =============================================================================
+# Components: OTEL Collector, Prometheus, Loki, Tempo, Grafana, Node Exporter, cAdvisor
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f        # View logs
+#   ./observability-cli.sh health # Check health
+# =============================================================================
+
+services:
+  # ===========================================================================
+  # OpenTelemetry Collector - Central telemetry hub
+  # ===========================================================================
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.96.0
+    container_name: otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "${OTEL_GRPC_PORT:-4317}:4317" # OTLP gRPC (apps send telemetry here)
+      - "${OTEL_HTTP_PORT:-4318}:4318" # OTLP HTTP
+      - "127.0.0.1:${OTEL_METRICS_PORT:-8888}:8888" # Collector metrics (internal)
+      - "127.0.0.1:${OTEL_PROMETHEUS_PORT:-8889}:8889" # Prometheus exporter (internal)
+    environment:
+      - TZ=UTC
+      - LOG_LEVEL=${LOG_LEVEL:-warn}
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: ${OTEL_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: "0.25"
+          memory: ${OTEL_MEMORY_RESERVATION:-128M}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Prometheus - Metrics storage
+  # ===========================================================================
+  prometheus:
+    image: prom/prometheus:v2.50.1
+    container_name: prometheus
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-15d}"
+      - "--storage.tsdb.retention.size=${PROMETHEUS_RETENTION_SIZE:-10GB}"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./config/alerting-rules:/etc/prometheus/alerting-rules:ro
+      - ./targets:/etc/prometheus/targets:ro
+      - ./secrets:/etc/prometheus/secrets:ro
+      - prometheus_data:/prometheus
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # For Docker auto-discovery
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: ${PROMETHEUS_MEMORY_LIMIT:-2G}
+        reservations:
+          cpus: "0.5"
+          memory: ${PROMETHEUS_MEMORY_RESERVATION:-512M}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment labels to enable)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.prometheus.rule=Host(`${PROMETHEUS_DOMAIN:-prometheus.example.com}`)"
+    #   - "traefik.http.routers.prometheus.entrypoints=websecure"
+    #   - "traefik.http.routers.prometheus.tls.certresolver=letsencrypt"
+    #   - "traefik.http.routers.prometheus.middlewares=chain-internal@file"
+    #   - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+    networks:
+      - observability
+      - infra          # For scraping services on infra network
+      - traefik-public  # Required for Traefik routing
+
+  # ===========================================================================
+  # Loki - Log aggregation
+  # ===========================================================================
+  loki:
+    image: grafana/loki:2.9.4
+    container_name: loki
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: ${LOKI_MEMORY_LIMIT:-1G}
+        reservations:
+          cpus: "0.25"
+          memory: ${LOKI_MEMORY_RESERVATION:-256M}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Promtail - Log shipper
+  # ===========================================================================
+  promtail:
+    image: grafana/promtail:2.9.4
+    container_name: promtail
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./config/promtail-config.yaml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - promtail_positions:/tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9080/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # ===========================================================================
+  # Tempo - Distributed tracing
+  # ===========================================================================
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: tempo
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./config/tempo-config.yaml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "127.0.0.1:${TEMPO_PORT:-3200}:3200"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: ${TEMPO_MEMORY_LIMIT:-1G}
+        reservations:
+          cpus: "0.25"
+          memory: ${TEMPO_MEMORY_RESERVATION:-256M}
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Redis Exporter - Multi-target mode (single exporter for all Redis instances)
+  # ===========================================================================
+  # Targets are defined in ./targets/redis.json
+  # Add/remove Redis instances by editing that file (auto-reloads)
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: redis-exporter
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      # No REDIS_ADDR - using multi-target mode via Prometheus
+    ports:
+      - "127.0.0.1:${REDIS_EXPORTER_PORT:-9121}:9121"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9121/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Alertmanager - Alert routing and notifications
+  # ===========================================================================
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: alertmanager
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+      - "--web.external-url=${ALERTMANAGER_EXTERNAL_URL:-http://localhost:9093}"
+    volumes:
+      - ./config/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "127.0.0.1:${ALERTMANAGER_PORT:-9093}:9093"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Node Exporter - Host metrics (CPU, Memory, Disk, Network)
+  # ===========================================================================
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: node-exporter
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "127.0.0.1:${NODE_EXPORTER_PORT:-9100}:9100"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # cAdvisor - Container metrics
+  # ===========================================================================
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: cadvisor
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - TZ=UTC
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:${CADVISOR_PORT:-8080}:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - observability
+
+  # ===========================================================================
+  # Grafana - Visualization
+  # ===========================================================================
+  grafana:
+    image: grafana/grafana:10.4.1
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      - TZ=UTC
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
+      - GF_LOG_LEVEL=${LOG_LEVEL:-warn}
+      # Security
+      - GF_SECURITY_DISABLE_GRAVATAR=true
+      - GF_SECURITY_COOKIE_SECURE=${GRAFANA_COOKIE_SECURE:-false}
+      - GF_SECURITY_COOKIE_SAMESITE=strict
+      # Performance
+      - GF_DATABASE_WAL=true
+      # Alerting - Using Prometheus + Alertmanager (not Grafana alerting)
+      - GF_UNIFIED_ALERTING_ENABLED=false
+      - GF_ALERTING_ENABLED=false
+      # SMTP for email alerts (optional)
+      - GF_SMTP_ENABLED=${SMTP_ENABLED:-false}
+      - GF_SMTP_HOST=${SMTP_HOST:-localhost:587}
+      - GF_SMTP_USER=${SMTP_USER:-}
+      - GF_SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - GF_SMTP_FROM_ADDRESS=${SMTP_FROM:-grafana@localhost}
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./config/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: ${GRAFANA_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: "0.25"
+          memory: ${GRAFANA_MEMORY_RESERVATION:-128M}
+    healthcheck:
+      test:
+        ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # -------------------------------------------------------------------------
+    # Traefik Configuration (uncomment labels AND add traefik-public network)
+    # -------------------------------------------------------------------------
+    # labels:
+    #   - "traefik.enable=true"
+    #   - "traefik.http.routers.grafana.rule=Host(`${GRAFANA_DOMAIN:-grafana.example.com}`)"
+    #   - "traefik.http.routers.grafana.entrypoints=websecure"
+    #   - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+    #   - "traefik.http.routers.grafana.middlewares=chain-web@file"
+    #   - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    networks:
+      - observability
+      - traefik-public  # Required for Traefik routing
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+      tempo:
+        condition: service_healthy
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  prometheus_data:
+    driver: local
+    name: observability_prometheus_data
+  loki_data:
+    driver: local
+    name: observability_loki_data
+  tempo_data:
+    driver: local
+    name: observability_tempo_data
+  grafana_data:
+    driver: local
+    name: observability_grafana_data
+  alertmanager_data:
+    driver: local
+    name: observability_alertmanager_data
+  promtail_positions:
+    driver: local
+    name: observability_promtail_positions
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  observability:
+    driver: bridge
+    name: observability
+  # Infra Network - for reaching services like LangFuse, RabbitMQ, Kafka, etc.
+  infra:
+    external: true
+    name: infra
+  # Traefik Network - created by setup-all.sh
+  traefik-public:
+    external: true
+    name: traefik-public

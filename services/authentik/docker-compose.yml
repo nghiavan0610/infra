@@ -1,0 +1,139 @@
+services:
+  # ===========================================================================
+  # PostgreSQL (bundled - remove if using external)
+  # ===========================================================================
+  postgresql:
+    image: postgres:16-alpine
+    container_name: authentik-db
+    restart: unless-stopped
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=authentik
+      - POSTGRES_USER=authentik
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks:
+      - authentik-net
+
+  # ===========================================================================
+  # Redis (bundled - remove if using external)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    restart: unless-stopped
+    command: --save 60 1 --loglevel warning
+    volumes:
+      - ./data/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+    networks:
+      - authentik-net
+
+  # ===========================================================================
+  # Authentik Server
+  # ===========================================================================
+  server:
+    image: ghcr.io/goauthentik/server:2024.2
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    volumes:
+      - ./media:/media
+      - ./templates:/templates
+    ports:
+      - "${AUTHENTIK_HTTP_PORT:-9000}:9000"
+      - "${AUTHENTIK_HTTPS_PORT:-9443}:9443"
+    environment:
+      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+      - AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD}
+      - AUTHENTIK_BOOTSTRAP_EMAIL=${AUTHENTIK_BOOTSTRAP_EMAIL}
+      # Database
+      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgresql}
+      - AUTHENTIK_POSTGRESQL__PORT=${POSTGRES_PORT:-5432}
+      - AUTHENTIK_POSTGRESQL__NAME=${POSTGRES_DB:-authentik}
+      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-authentik}
+      - AUTHENTIK_POSTGRESQL__PASSWORD=${POSTGRES_PASSWORD}
+      # Redis
+      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis}
+      - AUTHENTIK_REDIS__PORT=${REDIS_PORT:-6379}
+      # Error reporting (disable for privacy)
+      - AUTHENTIK_ERROR_REPORTING__ENABLED=false
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT_SERVER:-1g}
+          cpus: "${CPU_LIMIT:-2}"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - authentik-net
+
+  # ===========================================================================
+  # Authentik Worker (background tasks)
+  # ===========================================================================
+  worker:
+    image: ghcr.io/goauthentik/server:2024.2
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    volumes:
+      - ./media:/media
+      - ./templates:/templates
+      - ./certs:/certs
+    environment:
+      - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
+      # Database
+      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgresql}
+      - AUTHENTIK_POSTGRESQL__PORT=${POSTGRES_PORT:-5432}
+      - AUTHENTIK_POSTGRESQL__NAME=${POSTGRES_DB:-authentik}
+      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-authentik}
+      - AUTHENTIK_POSTGRESQL__PASSWORD=${POSTGRES_PASSWORD}
+      # Redis
+      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis}
+      - AUTHENTIK_REDIS__PORT=${REDIS_PORT:-6379}
+      # Error reporting
+      - AUTHENTIK_ERROR_REPORTING__ENABLED=false
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT_WORKER:-1g}
+          cpus: "${CPU_LIMIT:-2}"
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - authentik-net
+
+networks:
+  authentik-net:
+    driver: bridge
+    name: authentik-net
