@@ -60,6 +60,7 @@ services:
     #   - "traefik.http.routers.nats-monitor.middlewares=chain-internal@file"
     #   - "traefik.http.services.nats-monitor.loadbalancer.server.port=8222"
     networks:
+      - infra
       - nats-network
       # - traefik-public  # Uncomment to enable Traefik
 
@@ -136,6 +137,8 @@ volumes:
 # Networks
 # =============================================================================
 networks:
+  infra:
+    external: true
   nats-network:
     driver: bridge
     name: nats-network

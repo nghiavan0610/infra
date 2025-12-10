@@ -405,117 +405,124 @@ setup_env_file() {
 
     cd "$SCRIPT_DIR/$service_dir"
 
+    # Create .env from template if it doesn't exist
     if [[ ! -f ".env" ]] && [[ -f ".env.example" ]]; then
         cp .env.example .env
-
-        # Inject shared passwords based on service type
-        if [[ "$(uname)" == "Darwin" ]]; then
-            local SED_CMD="sed -i ''"
-        else
-            local SED_CMD="sed -i"
-        fi
-
-        case "$service_name" in
-            postgres|postgres-ha)
-                $SED_CMD "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${SHARED_POSTGRES_PASSWORD}|" .env
-                $SED_CMD "s|^POSTGRES_USER=.*|POSTGRES_USER=${SHARED_POSTGRES_USER}|" .env
-                ;;
-            redis)
-                $SED_CMD "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${SHARED_REDIS_PASSWORD}|" .env
-                ;;
-            mongo)
-                $SED_CMD "s|^MONGO_ROOT_PASSWORD=.*|MONGO_ROOT_PASSWORD=${SHARED_MONGO_PASSWORD}|" .env
-                $SED_CMD "s|^MONGO_ROOT_USER=.*|MONGO_ROOT_USER=${SHARED_MONGO_USER}|" .env
-                ;;
-            garage)
-                $SED_CMD "s|^GARAGE_ADMIN_TOKEN=.*|GARAGE_ADMIN_TOKEN=${SHARED_GARAGE_ADMIN_TOKEN}|" .env
-                ;;
-            observability)
-                local GRAFANA_PASS=$(openssl rand -base64 16 | tr -d '\n')
-                $SED_CMD "s|^GRAFANA_ADMIN_PASSWORD=.*|GRAFANA_ADMIN_PASSWORD=${GRAFANA_PASS}|" .env
-                ;;
-            asynq)
-                $SED_CMD "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${SHARED_REDIS_PASSWORD}|" .env
-                ;;
-            sentry)
-                local SENTRY_KEY=$(openssl rand -hex 32)
-                $SED_CMD "s|^SENTRY_SECRET_KEY=.*|SENTRY_SECRET_KEY=${SENTRY_KEY}|" .env
-                $SED_CMD "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${SHARED_POSTGRES_PASSWORD}|" .env
-                $SED_CMD "s|^POSTGRES_USER=.*|POSTGRES_USER=${SHARED_POSTGRES_USER}|" .env
-                $SED_CMD "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=${SHARED_REDIS_PASSWORD}|" .env
-                ;;
-            mysql)
-                local MYSQL_ROOT_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                local MYSQL_USER_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                $SED_CMD "s|^MYSQL_ROOT_PASSWORD=.*|MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASS}|" .env
-                $SED_CMD "s|^MYSQL_PASSWORD=.*|MYSQL_PASSWORD=${MYSQL_USER_PASS}|" .env
-                ;;
-            clickhouse)
-                local CH_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                $SED_CMD "s|^CLICKHOUSE_PASSWORD=.*|CLICKHOUSE_PASSWORD=${CH_PASS}|" .env
-                ;;
-            gitea)
-                local GITEA_SECRET=$(openssl rand -hex 32)
-                local GITEA_TOKEN=$(openssl rand -hex 32)
-                local GITEA_DB_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                $SED_CMD "s|^GITEA_SECRET_KEY=.*|GITEA_SECRET_KEY=${GITEA_SECRET}|" .env
-                $SED_CMD "s|^GITEA_INTERNAL_TOKEN=.*|GITEA_INTERNAL_TOKEN=${GITEA_TOKEN}|" .env
-                $SED_CMD "s|^GITEA_DB_PASSWORD=.*|GITEA_DB_PASSWORD=${GITEA_DB_PASS}|" .env
-                ;;
-            plausible)
-                local PLAUSIBLE_SECRET=$(openssl rand -base64 48)
-                local PLAUSIBLE_TOTP=$(openssl rand -base64 32)
-                local PLAUSIBLE_DB_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                $SED_CMD "s|^PLAUSIBLE_SECRET_KEY=.*|PLAUSIBLE_SECRET_KEY=${PLAUSIBLE_SECRET}|" .env
-                $SED_CMD "s|^PLAUSIBLE_TOTP_KEY=.*|PLAUSIBLE_TOTP_KEY=${PLAUSIBLE_TOTP}|" .env
-                $SED_CMD "s|^PLAUSIBLE_DB_PASSWORD=.*|PLAUSIBLE_DB_PASSWORD=${PLAUSIBLE_DB_PASS}|" .env
-                ;;
-            drone)
-                local DRONE_RPC=$(openssl rand -hex 16)
-                $SED_CMD "s|^DRONE_RPC_SECRET=.*|DRONE_RPC_SECRET=${DRONE_RPC}|" .env
-                ;;
-            vaultwarden)
-                local VW_ADMIN_TOKEN=$(openssl rand -base64 48)
-                $SED_CMD "s|^VAULTWARDEN_ADMIN_TOKEN=.*|VAULTWARDEN_ADMIN_TOKEN=${VW_ADMIN_TOKEN}|" .env
-                ;;
-            healthchecks)
-                local HC_SECRET=$(openssl rand -base64 32)
-                local HC_DB_PASS=$(openssl rand -hex 16)
-                $SED_CMD "s|^HEALTHCHECKS_SECRET_KEY=.*|HEALTHCHECKS_SECRET_KEY=${HC_SECRET}|" .env
-                $SED_CMD "s|^HEALTHCHECKS_DB_PASSWORD=.*|HEALTHCHECKS_DB_PASSWORD=${HC_DB_PASS}|" .env
-                ;;
-            langfuse)
-                local LF_SECRET=$(openssl rand -base64 32)
-                local LF_SALT=$(openssl rand -base64 32)
-                local LF_DB_PASS=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-                $SED_CMD "s|^LANGFUSE_NEXTAUTH_SECRET=.*|LANGFUSE_NEXTAUTH_SECRET=${LF_SECRET}|" .env
-                $SED_CMD "s|^LANGFUSE_SALT=.*|LANGFUSE_SALT=${LF_SALT}|" .env
-                $SED_CMD "s|^LANGFUSE_DB_PASS=.*|LANGFUSE_DB_PASS=${LF_DB_PASS}|" .env
-                $SED_CMD "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${SHARED_POSTGRES_PASSWORD}|" .env
-                ;;
-            opensearch)
-                # OpenSearch 2.12+ requires initial admin password with complexity requirements
-                # Must be 8+ chars with uppercase, lowercase, number, and special char
-                local OS_PASS="Admin@$(openssl rand -hex 8)"
-                $SED_CMD "s|^OPENSEARCH_ADMIN_PASSWORD=.*|OPENSEARCH_ADMIN_PASSWORD=${OS_PASS}|" .env
-                ;;
-            meilisearch)
-                local MEILI_KEY=$(openssl rand -base64 32 | tr -d '\n')
-                $SED_CMD "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=${MEILI_KEY}|" .env
-                ;;
-            github-runner)
-                # GitHub runner needs manual token configuration
-                log_warn "GitHub Runner requires manual configuration:"
-                log_warn "  1. Get token from GitHub repo → Settings → Actions → Runners"
-                log_warn "  2. Set GITHUB_RUNNER_TOKEN in services/github-runner/.env"
-                ;;
-            gitlab-runner)
-                # GitLab runner needs manual registration
-                log_warn "GitLab Runner requires manual registration:"
-                log_warn "  Run: cd services/gitlab-runner && docker compose run --rm gitlab-runner register"
-                ;;
-        esac
     fi
+
+    # Skip if no .env file
+    [[ ! -f ".env" ]] && { cd "$SCRIPT_DIR"; return; }
+
+    # Setup sed command for cross-platform compatibility
+    if [[ "$(uname)" == "Darwin" ]]; then
+        local SED_CMD="sed -i ''"
+    else
+        local SED_CMD="sed -i"
+    fi
+
+    # Helper: Set env var only if empty or placeholder
+    set_if_empty() {
+        local var_name=$1
+        local value=$2
+        local current=$(grep "^${var_name}=" .env 2>/dev/null | cut -d'=' -f2-)
+        # Set if empty, contains placeholder text, or is a default value
+        if [[ -z "$current" ]] || [[ "$current" =~ ^(change-me|CHANGE_ME|your_|changeme|placeholder) ]]; then
+            $SED_CMD "s|^${var_name}=.*|${var_name}=${value}|" .env
+        fi
+    }
+
+    # Always ensure secrets are set (fills empty values)
+    case "$service_name" in
+        postgres|postgres-ha)
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            ;;
+        redis)
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            set_if_empty "REDIS_CACHE_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            set_if_empty "REDIS_QUEUE_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            ;;
+        mongo)
+            set_if_empty "MONGO_ROOT_PASSWORD" "${SHARED_MONGO_PASSWORD}"
+            set_if_empty "MONGO_ROOT_USER" "${SHARED_MONGO_USER}"
+            ;;
+        garage)
+            set_if_empty "GARAGE_ADMIN_TOKEN" "${SHARED_GARAGE_ADMIN_TOKEN}"
+            ;;
+        observability)
+            local GRAFANA_PASS=$(grep "^GRAFANA_ADMIN_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2-)
+            [[ -z "$GRAFANA_PASS" ]] && set_if_empty "GRAFANA_ADMIN_PASSWORD" "$(openssl rand -base64 16 | tr -d '\n')"
+            ;;
+        asynq)
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            ;;
+        sentry)
+            set_if_empty "SENTRY_SECRET_KEY" "$(openssl rand -hex 32)"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            ;;
+        mysql)
+            set_if_empty "MYSQL_ROOT_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            set_if_empty "MYSQL_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            ;;
+        clickhouse)
+            set_if_empty "CLICKHOUSE_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            ;;
+        gitea)
+            set_if_empty "GITEA_SECRET_KEY" "$(openssl rand -hex 32)"
+            set_if_empty "GITEA_INTERNAL_TOKEN" "$(openssl rand -hex 32)"
+            set_if_empty "GITEA_DB_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            ;;
+        plausible)
+            set_if_empty "PLAUSIBLE_SECRET_KEY" "$(openssl rand -base64 48)"
+            set_if_empty "PLAUSIBLE_TOTP_KEY" "$(openssl rand -base64 32)"
+            set_if_empty "PLAUSIBLE_DB_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            ;;
+        drone)
+            set_if_empty "DRONE_RPC_SECRET" "$(openssl rand -hex 16)"
+            ;;
+        vaultwarden)
+            set_if_empty "VAULTWARDEN_ADMIN_TOKEN" "$(openssl rand -base64 48)"
+            ;;
+        healthchecks)
+            set_if_empty "HEALTHCHECKS_SECRET_KEY" "$(openssl rand -base64 32)"
+            set_if_empty "HEALTHCHECKS_DB_PASSWORD" "$(openssl rand -hex 16)"
+            ;;
+        langfuse)
+            set_if_empty "LANGFUSE_NEXTAUTH_SECRET" "$(openssl rand -base64 32)"
+            set_if_empty "LANGFUSE_SALT" "$(openssl rand -base64 32)"
+            set_if_empty "LANGFUSE_DB_PASS" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            ;;
+        opensearch)
+            # OpenSearch 2.12+ requires password with complexity: uppercase, lowercase, number, special char
+            set_if_empty "OPENSEARCH_ADMIN_PASSWORD" "Admin@$(openssl rand -hex 8)"
+            ;;
+        meilisearch)
+            set_if_empty "MEILI_MASTER_KEY" "$(openssl rand -base64 32 | tr -d '\n')"
+            ;;
+        nats)
+            set_if_empty "SYS_PASS" "$(openssl rand -base64 24 | tr -d '\n')"
+            set_if_empty "SURVEYOR_PASS" "$(openssl rand -base64 24 | tr -d '\n')"
+            ;;
+        rabbitmq)
+            set_if_empty "RABBITMQ_ADMIN_PASS" "$(openssl rand -base64 24 | tr -d '\n')"
+            set_if_empty "RABBITMQ_ERLANG_COOKIE" "$(openssl rand -hex 32)"
+            ;;
+        timescaledb)
+            set_if_empty "POSTGRES_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n')"
+            ;;
+        github-runner)
+            log_warn "GitHub Runner requires manual configuration:"
+            log_warn "  1. Get token from GitHub repo → Settings → Actions → Runners"
+            log_warn "  2. Set GITHUB_RUNNER_TOKEN in services/github-runner/.env"
+            ;;
+        gitlab-runner)
+            log_warn "GitLab Runner requires manual registration:"
+            log_warn "  Run: cd services/gitlab-runner && docker compose run --rm gitlab-runner register"
+            ;;
+    esac
 
     cd "$SCRIPT_DIR"
 }

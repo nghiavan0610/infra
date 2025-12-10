@@ -13,8 +13,7 @@
 
 services:
   asynqmon:
-    image: hibiken/asynqmon:0.7.2
-    platform: linux/amd64
+    image: hibiken/asynqmon:latest
     container_name: asynqmon
     restart: unless-stopped
     environment:
