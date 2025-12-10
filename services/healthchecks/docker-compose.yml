@@ -44,7 +44,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       - "traefik.enable=false"
@@ -65,14 +65,14 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - infra-network
+      - infra
 
 volumes:
   healthchecks_data:
   healthchecks_db_data:
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true

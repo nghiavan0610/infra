@@ -27,10 +27,10 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - infra-network
+      - infra
 
 networks:
-  infra-network:
+  infra:
     external: true
 
 volumes:

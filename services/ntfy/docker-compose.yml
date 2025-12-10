@@ -28,7 +28,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
@@ -44,7 +44,7 @@ volumes:
   ntfy_data:
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true

@@ -30,7 +30,7 @@ services:
       retries: 3
       start_period: 90s
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
@@ -57,7 +57,7 @@ services:
       timeout: 5s
       retries: 5
     networks:
-      - infra-network
+      - infra
 
   plausible-events-db:
     image: clickhouse/clickhouse-server:24.3-alpine
@@ -78,14 +78,14 @@ services:
       retries: 5
       start_period: 30s
     networks:
-      - infra-network
+      - infra
 
 volumes:
   plausible_db_data:
   plausible_events_data:
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true

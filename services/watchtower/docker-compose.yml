@@ -27,8 +27,8 @@ services:
       # Self-update watchtower
       - "com.centurylinklabs.watchtower.enable=true"
     networks:
-      - infra-network
+      - infra
 
 networks:
-  infra-network:
+  infra:
     external: true

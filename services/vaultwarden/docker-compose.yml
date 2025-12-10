@@ -34,7 +34,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
@@ -54,7 +54,7 @@ volumes:
   vaultwarden_data:
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true

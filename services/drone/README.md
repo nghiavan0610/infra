@@ -264,7 +264,7 @@ docker run -d \
   -e DRONE_RUNNER_NAME=runner-2 \
   -e DRONE_RUNNER_CAPACITY=2 \
   -v /var/run/docker.sock:/var/run/docker.sock \
-  --network infra-network \
+  --network infra \
   drone/drone-runner-docker:1
 ```
 

@@ -21,7 +21,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
@@ -33,7 +33,7 @@ services:
       - "traefik.enable=false"
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true

@@ -19,7 +19,7 @@ services:
       retries: 3
       start_period: 30s
     networks:
-      - infra-network
+      - infra
       - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
@@ -34,7 +34,7 @@ volumes:
   portainer_data:
 
 networks:
-  infra-network:
+  infra:
     external: true
   traefik-public:
     external: true
