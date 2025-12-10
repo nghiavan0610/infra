@@ -420,12 +420,12 @@ services:
       # Alerting - Using Prometheus + Alertmanager (not Grafana alerting)
       - GF_UNIFIED_ALERTING_ENABLED=false
       - GF_ALERTING_ENABLED=false
-      # SMTP for email alerts (optional)
-      - GF_SMTP_ENABLED=${SMTP_ENABLED:-false}
-      - GF_SMTP_HOST=${SMTP_HOST:-localhost:587}
-      - GF_SMTP_USER=${SMTP_USER:-}
-      - GF_SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - GF_SMTP_FROM_ADDRESS=${SMTP_FROM:-grafana@localhost}
+      # SMTP for email alerts (optional - disabled by default)
+      # - GF_SMTP_ENABLED=${SMTP_ENABLED:-false}
+      # - GF_SMTP_HOST=${SMTP_HOST:-localhost:587}
+      # - GF_SMTP_USER=${SMTP_USER:-}
+      # - GF_SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      # - GF_SMTP_FROM_ADDRESS=${SMTP_FROM:-grafana@localhost.local}
     volumes:
       - grafana_data:/var/lib/grafana
       - ./config/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
