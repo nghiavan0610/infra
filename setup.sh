@@ -961,11 +961,20 @@ show_summary() {
     echo "Commands:"
     echo "  ./status.sh       Check service status"
     echo "  ./stop.sh         Stop all services"
+    echo "  ./secure.sh       Set file permissions"
     echo ""
     echo "To add a service:"
     echo "  1. Edit services.conf"
     echo "  2. Set service=true"
     echo "  3. Run ./setup.sh"
+    echo ""
+
+    # Security reminder
+    echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo -e "${YELLOW}Security Reminder:${NC}"
+    echo "  Run ./secure.sh to restrict file permissions"
+    echo "  This prevents other users from accessing credentials"
     echo ""
 }
 
