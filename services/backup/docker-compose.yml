@@ -66,7 +66,7 @@ services:
       # Docker socket for volume backups (optional)
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
-      - infra-network
+      - infra
     labels:
       # Disable watchtower auto-updates for backup container
       - "com.centurylinklabs.watchtower.enable=false"
@@ -81,5 +81,5 @@ volumes:
     name: backup_cache
 
 networks:
-  infra-network:
+  infra:
     external: true
