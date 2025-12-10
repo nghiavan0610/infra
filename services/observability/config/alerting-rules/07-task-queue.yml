@@ -37,14 +37,14 @@ groups:
 
       # High task failure rate
       - alert: TaskFailureRateHigh
-        expr: rate(asynq_tasks_failed_total[5m]) / rate(asynq_tasks_processed_total[5m]) > 0.1
+        expr: 100 * rate(asynq_tasks_failed_total[5m]) / rate(asynq_tasks_processed_total[5m]) > 10
         for: 5m
         labels:
           severity: warning
           service: task-queue
         annotations:
           summary: "High task failure rate"
-          description: "Task failure rate is {{ printf \"%.1f\" (mul $value 100) }}% for queue {{ $labels.queue }}."
+          description: "Task failure rate is {{ printf \"%.1f\" $value }}% for queue {{ $labels.queue }}."
 
       # Dead tasks (exhausted retries)
       - alert: TasksInDeadQueue
