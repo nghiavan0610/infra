@@ -556,13 +556,8 @@ start_service() {
     esac
 
     # Start with docker compose
-    local compose_output
-    compose_output=$(docker compose up -d 2>&1)
-    local compose_exit=$?
-
-    if [[ $compose_exit -ne 0 ]]; then
+    if ! docker compose up -d --quiet-pull; then
         log_warn "Failed to start $service_name"
-        echo "$compose_output" | head -10
         cd "$SCRIPT_DIR"
         return 1
     fi
