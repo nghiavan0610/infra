@@ -4,11 +4,11 @@ Production-grade backup solution using Restic with automatic scheduling, notific
 
 ## Quick Start (Automated)
 
-The backup system is **automatically configured** by `setup-all.sh`:
+The backup system is **automatically configured** by `setup.sh`:
 
 ```bash
 # In your infra directory
-./setup-all.sh
+./setup.sh
 ```
 
 This will:

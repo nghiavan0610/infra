@@ -11,6 +11,9 @@ cd "$SCRIPT_DIR"
 # Load shared library
 source "$SCRIPT_DIR/lib/common.sh"
 
+# Require authentication
+require_auth
+
 log_header "Stopping Infrastructure Services"
 
 # Find all docker-compose.yml files and stop them

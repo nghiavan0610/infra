@@ -72,7 +72,7 @@ check_status() {
     fi
 
     # Check if infra repo exists
-    if [[ -d "$INSTALL_DIR" ]] && [[ -f "$INSTALL_DIR/setup-all.sh" ]]; then
+    if [[ -d "$INSTALL_DIR" ]] && [[ -f "$INSTALL_DIR/setup.sh" ]]; then
         REPO_EXISTS=true
         log_info "Infra repo found at $INSTALL_DIR"
     else
@@ -208,7 +208,7 @@ clone_repo() {
 start_services() {
     header "Step 4: Configure & Start Services"
 
-    if [[ ! -f "$INSTALL_DIR/setup-all.sh" ]]; then
+    if [[ ! -f "$INSTALL_DIR/setup.sh" ]]; then
         log_error "Infra repo not found. Run 'Clone repo' first."
         return
     fi
@@ -218,7 +218,7 @@ start_services() {
     # Check if password is set
     if [[ ! -f ".password_hash" ]]; then
         log_step "Setting admin password..."
-        ./setup-all.sh --set-password
+        ./setup.sh --set-password
     fi
 
     # Edit services.conf
@@ -235,7 +235,7 @@ start_services() {
 
     # Start
     log_step "Starting services..."
-    ./setup-all.sh
+    ./setup.sh
 }
 
 # =============================================================================
@@ -291,7 +291,7 @@ check_full_status() {
 # =============================================================================
 main() {
     # If running from curl pipe, clone first
-    if [[ ! -f "setup-all.sh" ]] && [[ ! -d ".git" ]]; then
+    if [[ ! -f "setup.sh" ]] && [[ ! -d ".git" ]]; then
         header "Bootstrap from Remote"
         log_step "Downloading infra repository..."
 

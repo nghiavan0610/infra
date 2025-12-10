@@ -5,7 +5,7 @@
 # Supports: PostgreSQL, MySQL, SQLite, MongoDB, etc.
 #
 # Usage:
-#   docker network create traefik-public  # If not using setup-all.sh
+#   docker network create traefik-public  # If not using setup.sh
 #   docker compose up -d
 #
 # Access: http://localhost:8081

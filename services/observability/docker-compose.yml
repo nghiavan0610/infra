@@ -510,7 +510,7 @@ networks:
   infra:
     external: true
     name: infra
-  # Traefik Network - created by setup-all.sh
+  # Traefik Network - created by setup.sh
   traefik-public:
     external: true
     name: traefik-public

@@ -8,7 +8,7 @@
 #   - Redis running (uses shared redis)
 #
 # Usage:
-#   docker network create traefik-public  # If not using setup-all.sh
+#   docker network create traefik-public  # If not using setup.sh
 #   docker compose up -d
 #   docker compose exec sentry sentry upgrade  # First time only
 #

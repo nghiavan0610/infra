@@ -4,7 +4,7 @@
 # Monitors your services from outside (unlike Prometheus which monitors internally)
 #
 # Usage:
-#   docker network create traefik-public  # If not using setup-all.sh
+#   docker network create traefik-public  # If not using setup.sh
 #   docker compose up -d
 #   Open http://localhost:3001
 # =============================================================================

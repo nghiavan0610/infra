@@ -50,7 +50,7 @@ nano .env
 ### 2. Create Required Network
 
 ```bash
-# If NOT using setup-all.sh from the root directory:
+# If NOT using setup.sh from the root directory:
 docker network create traefik-public
 ```
 

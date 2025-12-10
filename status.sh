@@ -11,6 +11,9 @@ cd "$SCRIPT_DIR"
 # Load shared library
 source "$SCRIPT_DIR/lib/common.sh"
 
+# Require authentication
+require_auth
+
 log_header "Infrastructure Status"
 
 print_status() {
@@ -108,7 +111,7 @@ print_status "Development & Debugging" \
 echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 echo "Commands:"
-echo "  ./setup-all.sh     Start services"
-echo "  ./stop-all.sh      Stop all services"
+echo "  ./setup.sh         Start services"
+echo "  ./stop.sh          Stop all services"
 echo "  docker ps          Show running containers"
 echo ""

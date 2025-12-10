@@ -1,7 +1,7 @@
 # =============================================================================
 # Alertmanager Configuration - Production
 # =============================================================================
-# Auto-configured by setup-all.sh to send alerts to ntfy
+# Auto-configured by setup.sh to send alerts to ntfy
 # =============================================================================
 
 global:

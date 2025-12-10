@@ -400,6 +400,96 @@ print_service_status() {
 }
 
 # =============================================================================
+# Authentication
+# =============================================================================
+
+# Get infra root for password file location
+_get_auth_root() {
+    local dir="$SCRIPT_DIR"
+    while [[ "$dir" != "/" ]]; do
+        if [[ -f "$dir/setup.sh" ]]; then
+            echo "$dir"
+            return 0
+        fi
+        dir=$(dirname "$dir")
+    done
+    echo "$SCRIPT_DIR"
+}
+
+# Check if password is set
+is_auth_configured() {
+    local auth_root=$(_get_auth_root)
+    [[ -f "$auth_root/.password_hash" ]]
+}
+
+# Require authentication (call at start of protected scripts)
+require_auth() {
+    local auth_root=$(_get_auth_root)
+    local password_file="$auth_root/.password_hash"
+
+    # Check if password is set
+    if [[ ! -f "$password_file" ]]; then
+        log_error "Password not configured"
+        echo ""
+        echo "    First time setup - run:"
+        echo "    ./setup.sh --set-password"
+        echo ""
+        exit 1
+    fi
+
+    # Prompt for password (hidden input)
+    echo -n "Enter admin password: "
+    read -s input_password
+    echo ""
+
+    # Hash the input and compare
+    local stored_hash=$(cat "$password_file")
+    local input_hash=$(echo -n "$input_password" | sha256sum | cut -d' ' -f1)
+
+    if [[ "$input_hash" != "$stored_hash" ]]; then
+        log_error "Access denied: Wrong password"
+        exit 1
+    fi
+
+    log_info "Authorized"
+}
+
+# Set or change password
+set_auth_password() {
+    local auth_root=$(_get_auth_root)
+    local password_file="$auth_root/.password_hash"
+
+    echo "Setting admin password for infrastructure management"
+    echo ""
+
+    # Get new password
+    echo -n "Enter new password: "
+    read -s password1
+    echo ""
+
+    echo -n "Confirm password: "
+    read -s password2
+    echo ""
+
+    if [[ "$password1" != "$password2" ]]; then
+        log_error "Passwords do not match"
+        exit 1
+    fi
+
+    if [[ ${#password1} -lt 8 ]]; then
+        log_error "Password must be at least 8 characters"
+        exit 1
+    fi
+
+    # Store hash (not plain text)
+    echo -n "$password1" | sha256sum | cut -d' ' -f1 > "$password_file"
+    chmod 600 "$password_file"
+
+    log_info "Password set successfully"
+    echo ""
+}
+
+# =============================================================================
 # Cleanup and Error Handling
 # =============================================================================
 
@@ -448,10 +538,10 @@ get_script_dir() {
 # Get infra root directory
 get_infra_root() {
     local script_dir=$(get_script_dir)
-    # Navigate up until we find setup-all.sh
+    # Navigate up until we find setup.sh
     local dir="$script_dir"
     while [[ "$dir" != "/" ]]; do
-        if [[ -f "$dir/setup-all.sh" ]]; then
+        if [[ -f "$dir/setup.sh" ]]; then
             echo "$dir"
             return 0
         fi

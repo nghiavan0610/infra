@@ -5,10 +5,10 @@
 # One command to setup your entire infrastructure stack.
 #
 # Usage:
-#   ./setup-all.sh              # Use services.conf
-#   ./setup-all.sh --minimal    # Override: essential services only
-#   ./setup-all.sh --standard   # Override: minimal + storage + security
-#   ./setup-all.sh --all        # Override: everything
+#   ./setup.sh              # Use services.conf
+#   ./setup.sh --minimal    # Override: essential services only
+#   ./setup.sh --standard   # Override: minimal + storage + security
+#   ./setup.sh --all        # Override: everything
 #
 # Configuration:
 #   Edit services.conf to enable/disable services
@@ -27,7 +27,7 @@ cd "$SCRIPT_DIR"
 # =============================================================================
 # Authorization Check (Password Protected)
 # =============================================================================
-# To set/change password, run: ./setup-all.sh --set-password
+# To set/change password, run: ./setup.sh --set-password
 #
 # Password hash is stored in .password_hash file (gitignored)
 # Even if someone can read the hash, they can't reverse it
@@ -41,7 +41,7 @@ check_authorization() {
         echo -e "\033[0;31m[✗] Password not configured\033[0m"
         echo ""
         echo "    First time setup - run:"
-        echo "    ./setup-all.sh --set-password"
+        echo "    ./setup.sh --set-password"
         echo ""
         exit 1
     fi
@@ -94,7 +94,7 @@ set_password() {
 
     echo -e "\033[0;32m[✓] Password set successfully\033[0m"
     echo ""
-    echo "You can now run: ./setup-all.sh"
+    echo "You can now run: ./setup.sh"
 }
 
 # Handle --set-password
