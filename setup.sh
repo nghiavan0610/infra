@@ -277,7 +277,9 @@ load_services_conf() {
 
         # Trim whitespace
         key=$(echo "$key" | xargs)
-        value=$(echo "$value" | xargs)
+
+        # Remove inline comments and trim whitespace
+        value=$(echo "$value" | cut -d'#' -f1 | xargs)
 
         if [[ "$value" == "true" ]]; then
             ENABLED_SERVICES["$key"]=true

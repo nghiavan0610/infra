@@ -5,10 +5,10 @@
 # Run this on a FRESH server to set up everything from scratch.
 #
 # Usage (on new server):
-#   curl -fsSL https://raw.githubusercontent.com/YOUR_USER/infra/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/nghiavan0610/infra/main/bootstrap.sh | bash
 #
-# Or clone first:
-#   git clone https://github.com/YOUR_USER/infra.git && cd infra && ./bootstrap.sh
+# Or clone first (requires GitHub SSH key):
+#   git clone git@github.com:nghiavan0610/infra.git && cd infra && ./bootstrap.sh
 #
 # Steps:
 #   1. VPS hardening (user, SSH, firewall)
@@ -44,7 +44,7 @@ header() {
 # =============================================================================
 # Configuration
 # =============================================================================
-REPO_URL="${INFRA_REPO_URL:-https://github.com/YOUR_USER/infra.git}"
+REPO_URL="${INFRA_REPO_URL:-git@github.com:nghiavan0610/infra.git}"
 INSTALL_DIR="${INFRA_DIR:-/opt/infra}"
 
 # =============================================================================

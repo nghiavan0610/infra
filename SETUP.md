@@ -8,8 +8,9 @@ Complete step-by-step guide for setting up infrastructure on a fresh VPS.
 # 1. SSH to fresh VPS as root
 ssh root@your-server-ip
 
-# 2. Clone and run VPS setup
-git clone https://github.com/YOUR_USER/infra.git /opt/infra
+# 2. Setup GitHub SSH key (see Step 0 below), then clone
+sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
+git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 bash scripts/vps-initial-setup.sh
 
@@ -40,6 +41,40 @@ nano services.conf           # Enable services
 - Minimum 2GB RAM, 2 CPU cores, 40GB disk
 - SSH public key (recommended)
 - Domain name (optional, for SSL)
+- GitHub SSH key (for private repo access)
+
+## Step 0: Setup GitHub SSH Key (Required for Private Repo)
+
+Before cloning, you need to set up SSH key authentication with GitHub.
+
+### 0.1 Generate SSH Key on Server
+
+```bash
+ssh-keygen -t ed25519 -C "deploy@$(hostname)"
+# Press Enter to accept default location
+# Press Enter for no passphrase (or set one)
+```
+
+### 0.2 Copy the Public Key
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+### 0.3 Add Key to GitHub
+
+1. Go to https://github.com/settings/keys
+2. Click "New SSH key"
+3. Title: `deploy@your-server-name`
+4. Paste the public key
+5. Click "Add SSH key"
+
+### 0.4 Test Connection
+
+```bash
+ssh -T git@github.com
+# Should see: "Hi nghiavan0610! You've successfully authenticated..."
+```
 
 ## Step 1: Initial Server Setup
 
@@ -53,10 +88,11 @@ ssh root@your-server-ip
 
 ```bash
 # Download the script
-curl -fsSL https://raw.githubusercontent.com/YOUR_USER/infra/main/scripts/vps-initial-setup.sh -o vps-initial-setup.sh
+curl -fsSL https://raw.githubusercontent.com/nghiavan0610/infra/main/scripts/vps-initial-setup.sh -o vps-initial-setup.sh
 
 # Or clone the repo first
-git clone https://github.com/YOUR_USER/infra.git /opt/infra
+sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
+git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 
 # Run the VPS setup script
@@ -108,8 +144,8 @@ ssh -p 2222 deploy@your-server-ip
 
 ```bash
 # Skip if you already cloned in Step 1
-sudo git clone https://github.com/YOUR_USER/infra.git /opt/infra
-sudo chown -R $USER:$USER /opt/infra
+sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
+git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 ```
 

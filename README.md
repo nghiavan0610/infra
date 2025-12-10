@@ -5,8 +5,9 @@ Production-ready, self-hosted infrastructure with one-command setup.
 ## Quick Start
 
 ```bash
-# On a new server:
-git clone https://github.com/YOUR_USER/infra.git /opt/infra
+# On a new server (requires GitHub SSH key - see SETUP.md Step 0):
+sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
+git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 
 # Set admin password (first time)
@@ -422,13 +423,14 @@ docker compose up -d
 
 ### Option 1: One Command
 ```bash
-curl -fsSL https://raw.githubusercontent.com/YOUR_USER/infra/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/nghiavan0610/infra/main/bootstrap.sh | bash
 ```
 
 ### Option 2: Manual
 ```bash
-# 1. Clone
-git clone https://github.com/YOUR_USER/infra.git /opt/infra
+# 1. Setup GitHub SSH key (see SETUP.md Step 0), then clone
+sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
+git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 
 # 2. (Optional) Setup VPS
