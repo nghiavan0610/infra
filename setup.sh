@@ -493,6 +493,16 @@ setup_env_file() {
                 $SED_CMD "s|^LANGFUSE_DB_PASS=.*|LANGFUSE_DB_PASS=${LF_DB_PASS}|" .env
                 $SED_CMD "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${SHARED_POSTGRES_PASSWORD}|" .env
                 ;;
+            opensearch)
+                # OpenSearch 2.12+ requires initial admin password with complexity requirements
+                # Must be 8+ chars with uppercase, lowercase, number, and special char
+                local OS_PASS="Admin@$(openssl rand -hex 8)"
+                $SED_CMD "s|^OPENSEARCH_ADMIN_PASSWORD=.*|OPENSEARCH_ADMIN_PASSWORD=${OS_PASS}|" .env
+                ;;
+            meilisearch)
+                local MEILI_KEY=$(openssl rand -base64 32 | tr -d '\n')
+                $SED_CMD "s|^MEILI_MASTER_KEY=.*|MEILI_MASTER_KEY=${MEILI_KEY}|" .env
+                ;;
             github-runner)
                 # GitHub runner needs manual token configuration
                 log_warn "GitHub Runner requires manual configuration:"

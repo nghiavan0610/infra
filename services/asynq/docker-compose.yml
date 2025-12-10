@@ -19,9 +19,9 @@ services:
     restart: unless-stopped
     environment:
       - TZ=UTC
-      - REDIS_ADDR=${REDIS_ADDR:-host.docker.internal:6380}
+      - REDIS_ADDR=${REDIS_ADDR:-redis-queue:6379}
       - REDIS_DB=${REDIS_DB:-0}
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       # Enable read-only mode in production (prevents task deletion from UI)
       # - READ_ONLY=true
     ports:
@@ -48,7 +48,9 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - asynq-network
+      - infra
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     labels:
       # Traefik (optional)
       - "traefik.enable=${TRAEFIK_ENABLED:-false}"
@@ -64,6 +66,5 @@ services:
 # Networks
 # =============================================================================
 networks:
-  asynq-network:
-    driver: bridge
-    name: asynq-network
+  infra:
+    external: true

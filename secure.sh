@@ -148,11 +148,11 @@ secure_for_user() {
     # Set regular file permissions
     # Config files (644) - need to be readable by Docker containers
     log_step "Setting config file permissions (644)..."
-    find "$SCRIPT_DIR/services" -type f \( -name "*.conf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.json" -o -name "*.xml" -o -name "*.cnf" -o -name "*.ini" \) -exec chmod 644 {} \;
+    find "$SCRIPT_DIR/services" -type f \( -name "*.conf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.json" -o -name "*.xml" -o -name "*.cnf" -o -name "*.ini" -o -name "enabled_plugins" \) -exec chmod 644 {} \;
 
     # Other files (600)
     log_step "Setting other file permissions (600)..."
-    find "$SCRIPT_DIR" -type f ! -name "*.sh" ! -name "*.conf" ! -name "*.yml" ! -name "*.yaml" ! -name "*.toml" ! -name "*.json" ! -name "*.xml" ! -name "*.cnf" ! -name "*.ini" -exec chmod 600 {} \;
+    find "$SCRIPT_DIR" -type f ! -name "*.sh" ! -name "*.conf" ! -name "*.yml" ! -name "*.yaml" ! -name "*.toml" ! -name "*.json" ! -name "*.xml" ! -name "*.cnf" ! -name "*.ini" ! -name "enabled_plugins" -exec chmod 600 {} \;
 
     # Ensure sensitive files are extra protected
     log_step "Protecting sensitive files..."
@@ -227,11 +227,11 @@ secure_for_group() {
 
     # Set config file permissions (readable by all - needed by Docker containers)
     log_step "Setting config file permissions (644)..."
-    find "$SCRIPT_DIR/services" -type f \( -name "*.conf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.json" -o -name "*.xml" -o -name "*.cnf" -o -name "*.ini" \) -exec chmod 644 {} \;
+    find "$SCRIPT_DIR/services" -type f \( -name "*.conf" -o -name "*.yml" -o -name "*.yaml" -o -name "*.toml" -o -name "*.json" -o -name "*.xml" -o -name "*.cnf" -o -name "*.ini" -o -name "enabled_plugins" \) -exec chmod 644 {} \;
 
     # Other files (readable by group)
     log_step "Setting other file permissions (640)..."
-    find "$SCRIPT_DIR" -type f ! -name "*.sh" ! -name "*.conf" ! -name "*.yml" ! -name "*.yaml" ! -name "*.toml" ! -name "*.json" ! -name "*.xml" ! -name "*.cnf" ! -name "*.ini" -exec chmod 640 {} \;
+    find "$SCRIPT_DIR" -type f ! -name "*.sh" ! -name "*.conf" ! -name "*.yml" ! -name "*.yaml" ! -name "*.toml" ! -name "*.json" ! -name "*.xml" ! -name "*.cnf" ! -name "*.ini" ! -name "enabled_plugins" -exec chmod 640 {} \;
 
     # Sensitive files - owner only (not even group)
     log_step "Protecting sensitive files (600)..."
