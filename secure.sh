@@ -119,10 +119,26 @@ secure_for_user() {
         fi
     fi
 
-    # Set directory permissions (owner only)
-    log_step "Setting directory permissions (700)..."
+    # Set root directory permissions (owner only)
+    log_step "Setting directory permissions..."
     chmod 700 "$SCRIPT_DIR"
+
+    # Most directories: 700 (owner only)
     find "$SCRIPT_DIR" -type d -exec chmod 700 {} \;
+
+    # Mounted directories need 755 (Docker containers run as different users)
+    log_step "Setting Docker-mounted directories (755)..."
+    find "$SCRIPT_DIR/services" -type d \( \
+        -name "dashboards" -o \
+        -name "config" -o \
+        -name "scripts" -o \
+        -name "data" -o \
+        -name "certs" -o \
+        -name "rules" -o \
+        -name "provisioning" -o \
+        -name "alerting-rules" -o \
+        -name "recording-rules" \
+    \) -exec chmod 755 {} \;
 
     # Set script permissions (executable by owner)
     log_step "Setting script permissions (700)..."
@@ -182,10 +198,26 @@ secure_for_group() {
         sudo chown -R "root:$group" "$SCRIPT_DIR"
     fi
 
-    # Set directory permissions (owner + group)
-    log_step "Setting directory permissions (750)..."
+    # Set root directory permissions (owner + group)
+    log_step "Setting directory permissions..."
     chmod 750 "$SCRIPT_DIR"
+
+    # Most directories: 750 (owner + group)
     find "$SCRIPT_DIR" -type d -exec chmod 750 {} \;
+
+    # Mounted directories need 755 (Docker containers run as different users)
+    log_step "Setting Docker-mounted directories (755)..."
+    find "$SCRIPT_DIR/services" -type d \( \
+        -name "dashboards" -o \
+        -name "config" -o \
+        -name "scripts" -o \
+        -name "data" -o \
+        -name "certs" -o \
+        -name "rules" -o \
+        -name "provisioning" -o \
+        -name "alerting-rules" -o \
+        -name "recording-rules" \
+    \) -exec chmod 755 {} \;
 
     # Set script permissions (executable by owner + group)
     log_step "Setting script permissions (750)..."

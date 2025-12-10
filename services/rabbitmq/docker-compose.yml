@@ -28,8 +28,7 @@ services:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_ADMIN_USER:-admin}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_ADMIN_PASS}
       - RABBITMQ_ERLANG_COOKIE=${RABBITMQ_ERLANG_COOKIE}
-      # Memory management
-      - RABBITMQ_VM_MEMORY_HIGH_WATERMARK=${RABBITMQ_MEMORY_WATERMARK:-0.7}
+      # Memory management - configured in rabbitmq.conf instead of deprecated env var
     volumes:
       - ./config/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./config/definitions.json:/etc/rabbitmq/definitions.json:ro

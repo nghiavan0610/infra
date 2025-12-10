@@ -30,6 +30,7 @@ nano services.conf           # Enable services
 ./setup.sh --set-password    # Set admin password
 ./setup.sh                   # Start services
 ./status.sh                  # Verify
+./secure.sh                  # Secure file permissions
 ```
 
 ---
@@ -499,6 +500,8 @@ docker system prune -a --volumes
 | `./status.sh` | Check all services |
 | `./stop.sh` | Stop all services |
 | `./setup.sh` | Start/restart services |
+| `./secure.sh` | Secure file permissions |
+| `./secure.sh --check` | Audit permissions |
 | `./test.sh` | Validate configurations |
 | `docker logs -f <name>` | View container logs |
 | `docker stats` | Resource usage |
@@ -509,6 +512,7 @@ docker system prune -a --volumes
 - [ ] SSH key authentication only
 - [ ] Firewall enabled (ufw)
 - [ ] Strong passwords in `.secrets`
+- [ ] File permissions secured (`./secure.sh`)
 - [ ] Database ports not exposed publicly (127.0.0.1 only)
 - [ ] Traefik SSL configured for public services
 - [ ] Fail2ban or Crowdsec enabled

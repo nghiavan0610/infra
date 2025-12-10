@@ -32,33 +32,45 @@ echo ""
 if [[ ! -f ".env" ]]; then
     log_info "Creating .env from template..."
     cp .env.example .env
-
-    # Auto-generate secrets
-    log_info "Generating secrets..."
-
-    RPC_SECRET=$(openssl rand -hex 32)
-    ADMIN_TOKEN=$(openssl rand -base64 32 | tr -d '\n')
-    WEB_PASS=$(openssl rand -base64 16 | tr -d '\n' | head -c 16)
-
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' "s|^GARAGE_RPC_SECRET=.*|GARAGE_RPC_SECRET=${RPC_SECRET}|" .env
-        sed -i '' "s|^GARAGE_ADMIN_TOKEN=.*|GARAGE_ADMIN_TOKEN=${ADMIN_TOKEN}|" .env
-        sed -i '' "s|^GARAGE_METRICS_TOKEN=.*|GARAGE_METRICS_TOKEN=${ADMIN_TOKEN}|" .env
-        sed -i '' "s|^GARAGE_WEB_UI_PASS=.*|GARAGE_WEB_UI_PASS=${WEB_PASS}|" .env
-    else
-        sed -i "s|^GARAGE_RPC_SECRET=.*|GARAGE_RPC_SECRET=${RPC_SECRET}|" .env
-        sed -i "s|^GARAGE_ADMIN_TOKEN=.*|GARAGE_ADMIN_TOKEN=${ADMIN_TOKEN}|" .env
-        sed -i "s|^GARAGE_METRICS_TOKEN=.*|GARAGE_METRICS_TOKEN=${ADMIN_TOKEN}|" .env
-        sed -i "s|^GARAGE_WEB_UI_PASS=.*|GARAGE_WEB_UI_PASS=${WEB_PASS}|" .env
-    fi
-else
-    log_info ".env already exists, skipping..."
 fi
 
-# Load environment
+# Load current env to check secrets
 set -a
 source .env
 set +a
+
+# Validate and regenerate secrets if needed
+NEED_SECRET_UPDATE=false
+
+# RPC secret must be exactly 64 hex characters (32 bytes)
+if [[ -z "$GARAGE_RPC_SECRET" ]] || [[ ${#GARAGE_RPC_SECRET} -ne 64 ]]; then
+    log_info "Generating new RPC secret (must be 64 hex chars)..."
+    RPC_SECRET=$(openssl rand -hex 32)
+    NEED_SECRET_UPDATE=true
+fi
+
+if [[ -z "$GARAGE_ADMIN_TOKEN" ]]; then
+    log_info "Generating new admin token..."
+    ADMIN_TOKEN=$(openssl rand -base64 32 | tr -d '\n')
+    NEED_SECRET_UPDATE=true
+fi
+
+if [[ "$NEED_SECRET_UPDATE" == "true" ]]; then
+    log_info "Updating secrets in .env..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        [[ -n "${RPC_SECRET:-}" ]] && sed -i '' "s|^GARAGE_RPC_SECRET=.*|GARAGE_RPC_SECRET=${RPC_SECRET}|" .env
+        [[ -n "${ADMIN_TOKEN:-}" ]] && sed -i '' "s|^GARAGE_ADMIN_TOKEN=.*|GARAGE_ADMIN_TOKEN=${ADMIN_TOKEN}|" .env
+        [[ -n "${ADMIN_TOKEN:-}" ]] && sed -i '' "s|^GARAGE_METRICS_TOKEN=.*|GARAGE_METRICS_TOKEN=${ADMIN_TOKEN}|" .env
+    else
+        [[ -n "${RPC_SECRET:-}" ]] && sed -i "s|^GARAGE_RPC_SECRET=.*|GARAGE_RPC_SECRET=${RPC_SECRET}|" .env
+        [[ -n "${ADMIN_TOKEN:-}" ]] && sed -i "s|^GARAGE_ADMIN_TOKEN=.*|GARAGE_ADMIN_TOKEN=${ADMIN_TOKEN}|" .env
+        [[ -n "${ADMIN_TOKEN:-}" ]] && sed -i "s|^GARAGE_METRICS_TOKEN=.*|GARAGE_METRICS_TOKEN=${ADMIN_TOKEN}|" .env
+    fi
+    # Reload after update
+    source .env
+else
+    log_info ".env secrets are valid, skipping..."
+fi
 
 # Step 2: Create directories
 log_info "Creating directories..."

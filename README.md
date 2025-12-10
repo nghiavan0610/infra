@@ -18,6 +18,9 @@ nano services.conf
 
 # Start everything
 ./setup.sh
+
+# Secure file permissions (prevents other users from reading credentials)
+./secure.sh
 ```
 
 ## Structure
@@ -27,6 +30,7 @@ infra/
 ├── setup.sh              # Start services
 ├── stop.sh               # Stop services
 ├── status.sh             # Check status
+├── secure.sh             # Set file permissions
 ├── test.sh               # Validate all configurations
 ├── services.conf         # Enable/disable services
 │
@@ -65,6 +69,9 @@ infra/
 | `./setup.sh --standard` | Start standard preset |
 | `./stop.sh` | Stop all services |
 | `./status.sh` | Check service status |
+| `./secure.sh` | Secure file permissions (owner only) |
+| `./secure.sh --group NAME` | Secure for admin group |
+| `./secure.sh --check` | Audit current permissions |
 | `./test.sh` | Validate all configurations |
 | `./test.sh --verbose` | Detailed validation output |
 
@@ -518,3 +525,40 @@ Run the test script to validate all configurations before deploying:
 */data/           # Runtime data
 */certs/          # SSL certificates
 ```
+
+## Security
+
+### Password Protection
+
+All scripts require admin password authentication:
+```bash
+./setup.sh --set-password  # Set password (first time)
+./setup.sh                 # Requires password
+./stop.sh                  # Requires password
+./status.sh                # Requires password
+./secure.sh                # Requires password
+```
+
+### File Permissions
+
+Run `./secure.sh` after setup to restrict access:
+
+```bash
+# Only your user can access (strictest)
+./secure.sh
+
+# Allow a group of admins
+./secure.sh --group infra-admins
+
+# Check current permissions
+./secure.sh --check
+```
+
+| File Type | Permission | Description |
+|-----------|------------|-------------|
+| Directories | 700 | Owner only |
+| Scripts (*.sh) | 700 | Owner execute only |
+| Config files (*.yml, *.conf) | 644 | Readable (Docker needs this) |
+| Sensitive files (.env, .secrets) | 600 | Owner only |
+
+**Why config files are 644:** Docker containers run as different users (postgres, redis, etc.) and need to read mounted config files.
