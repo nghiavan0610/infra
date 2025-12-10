@@ -374,7 +374,7 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
     ports:
-      - "127.0.0.1:${CADVISOR_PORT:-8080}:8080"
+      - "127.0.0.1:${CADVISOR_PORT:-8081}:8080"
     deploy:
       resources:
         limits:
