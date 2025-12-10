@@ -9,7 +9,8 @@ services:
       - NET_RAW
     volumes:
       - ./data:/data
-      - ./config:/etc/fail2ban/jail.d:ro
+      - ./config/jail.local:/etc/fail2ban/jail.d/jail.local:ro
+      - ./config/filter.d:/etc/fail2ban/filter.d:ro
       - /var/log:/var/log:ro
       # For Docker container logs
       - /var/lib/docker/containers:/var/lib/docker/containers:ro

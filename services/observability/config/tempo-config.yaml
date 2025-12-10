@@ -103,13 +103,9 @@ metrics_generator:
 # Overrides - Per-tenant settings
 # -----------------------------------------------------------------------------
 overrides:
-  defaults:
-    metrics_generator:
-      processors:
-        - service-graphs
-        - span-metrics
-    ingestion:
-      rate_limit_bytes: 15000000     # 15MB/s
-      burst_size_bytes: 20000000     # 20MB burst
-    global:
-      max_traces_per_user: 100000
+  metrics_generator_processors:
+    - service-graphs
+    - span-metrics
+  ingestion_rate_limit_bytes: 15000000     # 15MB/s
+  ingestion_burst_size_bytes: 20000000     # 20MB burst
+  max_traces_per_user: 100000

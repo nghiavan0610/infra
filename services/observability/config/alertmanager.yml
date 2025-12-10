@@ -61,30 +61,15 @@ receivers:
     webhook_configs:
       - url: 'http://ntfy:80/alerts'
         send_resolved: true
-        http_config:
-          headers:
-            Title: '{{ if eq .Status "firing" }}🔥 ALERT{{ else }}✅ RESOLVED{{ end }}: {{ .CommonLabels.alertname }}'
-            Priority: '{{ if eq .CommonLabels.severity "critical" }}urgent{{ else if eq .CommonLabels.severity "warning" }}high{{ else }}default{{ end }}'
-            Tags: '{{ if eq .Status "firing" }}{{ if eq .CommonLabels.severity "critical" }}skull{{ else }}warning{{ end }}{{ else }}white_check_mark{{ end }}'
 
   # Critical alerts - urgent priority
   - name: 'ntfy-critical'
     webhook_configs:
       - url: 'http://ntfy:80/alerts-critical'
         send_resolved: true
-        http_config:
-          headers:
-            Title: '🚨 CRITICAL: {{ .CommonLabels.alertname }}'
-            Priority: 'urgent'
-            Tags: 'rotating_light,skull'
 
   # Warning alerts - high priority
   - name: 'ntfy-warning'
     webhook_configs:
       - url: 'http://ntfy:80/alerts-warning'
         send_resolved: true
-        http_config:
-          headers:
-            Title: '⚠️ WARNING: {{ .CommonLabels.alertname }}'
-            Priority: 'high'
-            Tags: 'warning'

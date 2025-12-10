@@ -65,14 +65,14 @@ groups:
 
       # PostgreSQL High Rollback Rate
       - alert: PostgreSQLHighRollbackRate
-        expr: rate(pg_stat_database_xact_rollback[5m]) / (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])) > 0.1
+        expr: 100 * rate(pg_stat_database_xact_rollback[5m]) / (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])) > 10
         for: 5m
         labels:
           severity: warning
           service: postgresql
         annotations:
           summary: "PostgreSQL high rollback rate"
-          description: "PostgreSQL {{ $labels.datname }} has {{ printf \"%.1f\" (mul $value 100) }}% transaction rollback rate."
+          description: "PostgreSQL {{ $labels.datname }} has {{ printf \"%.1f\" $value }}% transaction rollback rate (threshold: 10%)."
 
       # PostgreSQL Replication Lag (for replicas)
       - alert: PostgreSQLReplicationLag
@@ -98,14 +98,14 @@ groups:
 
       # PostgreSQL Cache Hit Rate Low
       - alert: PostgreSQLLowCacheHitRate
-        expr: pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read) < 0.9
+        expr: 100 * pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read) < 90
         for: 10m
         labels:
           severity: warning
           service: postgresql
         annotations:
           summary: "PostgreSQL cache hit rate low"
-          description: "PostgreSQL {{ $labels.datname }} cache hit rate is {{ printf \"%.1f\" (mul $value 100) }}%."
+          description: "PostgreSQL {{ $labels.datname }} cache hit rate is {{ printf \"%.1f\" $value }}% (threshold: 90%)."
 
       # PostgreSQL Table Bloat
       - alert: PostgreSQLTableBloat

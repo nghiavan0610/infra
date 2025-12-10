@@ -20,20 +20,26 @@ banaction = iptables-multiport
 
 # -----------------------------------------------------------------------------
 # SSH Protection
+# Enable only if SSH logs exist on your system
 # -----------------------------------------------------------------------------
 [sshd]
-enabled = true
+enabled = false
 port = ssh
 filter = sshd
+# Support multiple Linux distributions:
+# - Debian/Ubuntu: /var/log/auth.log
+# - RHEL/CentOS/Oracle: /var/log/secure
 logpath = /var/log/auth.log
+         /var/log/secure
 maxretry = 3
 bantime = 86400
 
 # -----------------------------------------------------------------------------
-# Traefik Protection (if using Traefik)
+# Traefik Protection
+# Enable only if Traefik access logs are configured
 # -----------------------------------------------------------------------------
 [traefik-auth]
-enabled = true
+enabled = false
 port = http,https
 filter = traefik-auth
 logpath = /var/log/traefik/access.log
@@ -60,9 +66,10 @@ maxretry = 2
 
 # -----------------------------------------------------------------------------
 # Docker Container Auth Failures
+# Monitors Docker container logs for 401/403 responses
 # -----------------------------------------------------------------------------
 [docker-auth]
-enabled = true
+enabled = false
 port = http,https
 filter = docker-auth
 logpath = /var/lib/docker/containers/*/*-json.log
