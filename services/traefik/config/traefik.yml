@@ -16,14 +16,18 @@ api:
   dashboard: true
   insecure: false  # Dashboard only via secure route with auth
 
-# Health check endpoint
+# Health check endpoint (uses traefik internal port)
 ping:
-  entryPoint: websecure
+  entryPoint: traefik
 
 # -----------------------------------------------------------------------------
 # Entry Points (Ports)
 # -----------------------------------------------------------------------------
 entryPoints:
+  # Internal healthcheck/metrics (not exposed externally)
+  traefik:
+    address: ":8082"
+
   # HTTP - redirects to HTTPS
   web:
     address: ":80"
