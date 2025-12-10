@@ -132,6 +132,7 @@ secure_for_user() {
         -name "dashboards" -o \
         -name "config" -o \
         -name "scripts" -o \
+        -name "init-scripts" -o \
         -name "data" -o \
         -name "certs" -o \
         -name "rules" -o \
@@ -211,6 +212,7 @@ secure_for_group() {
         -name "dashboards" -o \
         -name "config" -o \
         -name "scripts" -o \
+        -name "init-scripts" -o \
         -name "data" -o \
         -name "certs" -o \
         -name "rules" -o \
