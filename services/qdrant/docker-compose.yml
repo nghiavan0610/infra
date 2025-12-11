@@ -22,10 +22,7 @@ services:
       - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-}
       - QDRANT__SERVICE__ENABLE_TLS=${QDRANT_ENABLE_TLS:-false}
       - QDRANT__LOG_LEVEL=${QDRANT_LOG_LEVEL:-INFO}
-      # Performance tuning
-      - QDRANT__STORAGE__PERFORMANCE__MAX_SEARCH_THREADS=${QDRANT_MAX_SEARCH_THREADS:-0}
-      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=${QDRANT_INDEXING_THRESHOLD:-20000}
-      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=${QDRANT_MEMMAP_THRESHOLD:-50000}
+      # Performance settings are in config/config.yaml to avoid duplicates
     volumes:
       - qdrant_data:/qdrant/storage
       - ./snapshots:/qdrant/snapshots
