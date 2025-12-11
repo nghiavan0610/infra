@@ -500,6 +500,7 @@ setup_env_file() {
             set_if_empty "LANGFUSE_NEXTAUTH_SECRET" "$(openssl rand -base64 32)"
             set_if_empty "LANGFUSE_SALT" "$(openssl rand -base64 32)"
             set_if_empty "LANGFUSE_DB_PASS" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            set_if_empty "LANGFUSE_REDIS_AUTH" "${SHARED_REDIS_PASSWORD}"
             set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
             ;;
         opensearch)
