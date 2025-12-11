@@ -22,9 +22,8 @@ services:
       - /bin/bash
       - -c
       - |
-        if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
-          /usr/share/opensearch/bin/opensearch-plugin remove opensearch-security --purge 2>/dev/null || true
-        fi
+        echo "Removing OpenSearch security plugin..."
+        /usr/share/opensearch/bin/opensearch-plugin remove opensearch-security --purge 2>/dev/null || true
         exec ./opensearch-docker-entrypoint.sh
     environment:
       - TZ=UTC
@@ -33,8 +32,7 @@ services:
       - node.name=opensearch-node1
       - discovery.type=single-node
       - network.host=0.0.0.0
-      # Security - set to true to remove security plugin (no SSL required)
-      - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-true}
+      # Security disabled - plugin is removed at startup
       - DISABLE_INSTALL_DEMO_CONFIG=true
       # Performance
       - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP_SIZE:-1g} -Xmx${OPENSEARCH_HEAP_SIZE:-1g}"
