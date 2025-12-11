@@ -104,28 +104,29 @@ services:
     container_name: langfuse-init
     environment:
       - PGPASSWORD=${POSTGRES_PASSWORD}
+      - LANGFUSE_DB_NAME=${LANGFUSE_DB_NAME:-langfuse}
+      - LANGFUSE_DB_USER=${LANGFUSE_DB_USER:-langfuse}
+      - LANGFUSE_DB_PASS=${LANGFUSE_DB_PASS}
     networks:
       - infra
-    entrypoint: |
-      sh -c '
+    entrypoint:
+      - sh
+      - -c
+      - |
         echo "Waiting for PostgreSQL..."
         until pg_isready -h postgres -U postgres; do
           sleep 2
         done
-
         echo "Checking if database exists..."
-        if ! psql -h postgres -U postgres -lqt | cut -d \| -f 1 | grep -qw ${LANGFUSE_DB_NAME:-langfuse}; then
+        if ! psql -h postgres -U postgres -lqt | cut -d \| -f 1 | grep -qw "$$LANGFUSE_DB_NAME"; then
           echo "Creating database and user..."
-          psql -h postgres -U postgres <<-EOSQL
-            CREATE USER ${LANGFUSE_DB_USER:-langfuse} WITH PASSWORD '\''${LANGFUSE_DB_PASS}'\'';
-            CREATE DATABASE ${LANGFUSE_DB_NAME:-langfuse} OWNER ${LANGFUSE_DB_USER:-langfuse};
-            GRANT ALL PRIVILEGES ON DATABASE ${LANGFUSE_DB_NAME:-langfuse} TO ${LANGFUSE_DB_USER:-langfuse};
-        EOSQL
+          psql -h postgres -U postgres -c "CREATE USER $$LANGFUSE_DB_USER WITH PASSWORD '$$LANGFUSE_DB_PASS';" || true
+          psql -h postgres -U postgres -c "CREATE DATABASE $$LANGFUSE_DB_NAME OWNER $$LANGFUSE_DB_USER;"
+          psql -h postgres -U postgres -c "GRANT ALL PRIVILEGES ON DATABASE $$LANGFUSE_DB_NAME TO $$LANGFUSE_DB_USER;"
           echo "Database created successfully"
         else
           echo "Database already exists"
         fi
-      '
     restart: "no"
 
   # ===========================================================================
