@@ -29,8 +29,8 @@ services:
     environment:
       - TZ=UTC
       - NATS_SERVER_NAME=${NATS_SERVER_NAME:-nats-1}
-      # Auth credentials (used in auth.conf)
-      - NATS_SYS_PASSWORD=${NATS_SYS_PASSWORD}
+      # Auth credentials (used in auth.conf, auto-generated in .env)
+      - NATS_SYS_PASSWORD=${NATS_SYS_PASSWORD:-}
     deploy:
       resources:
         limits:

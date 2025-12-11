@@ -61,6 +61,9 @@ check_authorization() {
     fi
 
     echo -e "\033[0;32m[✓] Authorized\033[0m"
+
+    # Export flag so child scripts (using lib/common.sh require_auth) skip re-authentication
+    export INFRA_AUTH_VERIFIED=1
 }
 
 set_password() {
