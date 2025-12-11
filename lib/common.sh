@@ -424,6 +424,11 @@ is_auth_configured() {
 
 # Require authentication (call at start of protected scripts)
 require_auth() {
+    # Skip if already authenticated (e.g., called from main setup.sh)
+    if [[ "${INFRA_AUTH_VERIFIED:-}" == "1" ]]; then
+        return 0
+    fi
+
     local auth_root=$(_get_auth_root)
     local password_file="$auth_root/.password_hash"
 
@@ -452,6 +457,9 @@ require_auth() {
     fi
 
     log_info "Authorized"
+
+    # Export flag so child scripts skip re-authentication
+    export INFRA_AUTH_VERIFIED=1
 }
 
 # Set or change password

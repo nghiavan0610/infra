@@ -558,6 +558,14 @@ start_service() {
             mkdir -p certs
             [[ ! -f "certs/acme.json" ]] && touch certs/acme.json && chmod 600 certs/acme.json
             ;;
+        asynq)
+            # Asynqmon doesn't have ARM64 image - skip on ARM
+            if [[ "$(uname -m)" == "aarch64" ]] || [[ "$(uname -m)" == "arm64" ]]; then
+                log_warn "asynqmon skipped (no ARM64 image available)"
+                cd "$SCRIPT_DIR"
+                return 0
+            fi
+            ;;
         garage)
             if [[ -f "setup.sh" ]]; then
                 ./setup.sh 2>/dev/null || docker compose up -d
@@ -575,6 +583,13 @@ start_service() {
             fi
             ;;
     esac
+
+    # Export env vars for docker compose (suppress errors for empty values)
+    if [[ -f ".env" ]]; then
+        set -a
+        source .env 2>/dev/null || true
+        set +a
+    fi
 
     # Start with docker compose
     if ! docker compose up -d --quiet-pull; then

@@ -23,14 +23,23 @@ path.logs: /usr/share/opensearch/logs
 path.repo: ["/usr/share/opensearch/backup"]
 
 # Security settings
-plugins.security.disabled: false
-plugins.security.allow_default_init_securityindex: true
-plugins.security.check_snapshot_restore_write_privileges: true
-plugins.security.enable_snapshot_restore_privilege: true
+# Set to true to disable security (no auth required) - useful for development
+# Set to false and configure SSL for production
+plugins.security.disabled: true
 
-# SSL/TLS settings (disabled for development, enable for production)
-plugins.security.ssl.http.enabled: false
-plugins.security.ssl.transport.enabled: false
+# Uncomment below to enable security (requires SSL certs)
+# plugins.security.disabled: false
+# plugins.security.allow_default_init_securityindex: true
+# plugins.security.check_snapshot_restore_write_privileges: true
+# plugins.security.enable_snapshot_restore_privilege: true
+# plugins.security.ssl.http.enabled: true
+# plugins.security.ssl.transport.enabled: true
+# plugins.security.ssl.transport.pemcert_filepath: certs/node.pem
+# plugins.security.ssl.transport.pemkey_filepath: certs/node-key.pem
+# plugins.security.ssl.transport.pemtrustedcas_filepath: certs/root-ca.pem
+# plugins.security.ssl.http.pemcert_filepath: certs/node.pem
+# plugins.security.ssl.http.pemkey_filepath: certs/node-key.pem
+# plugins.security.ssl.http.pemtrustedcas_filepath: certs/root-ca.pem
 
 # Performance settings
 indices.fielddata.cache.size: 40%
@@ -54,6 +63,3 @@ indices.recovery.max_bytes_per_sec: 40mb
 
 # Logging level
 logger.level: INFO
-
-# Security settings
-plugins.security.unsupported.restapi.allow_securityconfig_modification: true
