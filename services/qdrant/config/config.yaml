@@ -2,57 +2,13 @@
 # Qdrant Configuration - Production
 # =============================================================================
 # Documentation: https://qdrant.tech/documentation/guides/configuration/
+# Note: Most settings use Qdrant defaults. Only override what's needed.
 # =============================================================================
-
-log_level: INFO
-
-# Storage settings
-storage:
-  # Where to store data
-  storage_path: /qdrant/storage
-
-  # Snapshots directory
-  snapshots_path: /qdrant/snapshots
-
-  # Performance optimizers
-  optimizers:
-    # Start indexing after this many vectors
-    indexing_threshold: 20000
-
-    # Use memory-mapped files after this many vectors (saves RAM)
-    memmap_threshold: 50000
-
-    # Flush interval for WAL
-    flush_interval_sec: 5
-
-    # Max segment size (bytes) - 200MB
-    max_segment_size_kb: 204800
-
-  # Write-ahead log settings
-  wal:
-    wal_capacity_mb: 256
-    wal_segments_ahead: 0
-
-  # Performance tuning
-  performance:
-    # 0 = use all available CPUs
-    max_search_threads: 0
-    max_optimization_threads: 1
 
 # Service settings
 service:
-  # HTTP API port
-  http_port: 6333
-
-  # gRPC port
-  grpc_port: 6334
-
   # Enable metrics endpoint at /metrics
   enable_metrics: true
-
-  # Max request size (64MB)
-  max_request_size_mb: 64
-
   # Enable CORS
   enable_cors: true
 
