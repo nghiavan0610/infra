@@ -1,8 +1,10 @@
 # OpenSearch Production Configuration
 # =================================
+# Note: Security plugin is removed when DISABLE_SECURITY_PLUGIN=true
+# For production with security, set OPENSEARCH_DISABLE_SECURITY=false and configure SSL certs
 
 # Cluster settings
-cluster.name: production-opensearch
+cluster.name: opensearch-cluster
 node.name: opensearch-node1
 node.roles: [cluster_manager, data, ingest]
 
@@ -11,7 +13,7 @@ network.host: 0.0.0.0
 http.port: 9200
 transport.port: 9300
 
-# Discovery settings (single node for now, can be expanded)
+# Discovery settings (single node)
 discovery.type: single-node
 
 # Memory settings
@@ -20,26 +22,6 @@ bootstrap.memory_lock: true
 # Data and logs paths
 path.data: /usr/share/opensearch/data
 path.logs: /usr/share/opensearch/logs
-path.repo: ["/usr/share/opensearch/backup"]
-
-# Security settings
-# Set to true to disable security (no auth required) - useful for development
-# Set to false and configure SSL for production
-plugins.security.disabled: true
-
-# Uncomment below to enable security (requires SSL certs)
-# plugins.security.disabled: false
-# plugins.security.allow_default_init_securityindex: true
-# plugins.security.check_snapshot_restore_write_privileges: true
-# plugins.security.enable_snapshot_restore_privilege: true
-# plugins.security.ssl.http.enabled: true
-# plugins.security.ssl.transport.enabled: true
-# plugins.security.ssl.transport.pemcert_filepath: certs/node.pem
-# plugins.security.ssl.transport.pemkey_filepath: certs/node-key.pem
-# plugins.security.ssl.transport.pemtrustedcas_filepath: certs/root-ca.pem
-# plugins.security.ssl.http.pemcert_filepath: certs/node.pem
-# plugins.security.ssl.http.pemkey_filepath: certs/node-key.pem
-# plugins.security.ssl.http.pemtrustedcas_filepath: certs/root-ca.pem
 
 # Performance settings
 indices.fielddata.cache.size: 40%
@@ -57,8 +39,6 @@ indices.breaker.request.limit: 40%
 
 # Recovery settings
 cluster.routing.allocation.node_concurrent_recoveries: 2
-
-# Performance settings
 indices.recovery.max_bytes_per_sec: 40mb
 
 # Logging level

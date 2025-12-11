@@ -17,6 +17,15 @@ services:
     image: opensearchproject/opensearch:2.17.1
     container_name: opensearch
     restart: unless-stopped
+    # Remove security plugin on startup (required for OpenSearch 2.x without SSL certs)
+    entrypoint:
+      - /bin/bash
+      - -c
+      - |
+        if [ "$DISABLE_SECURITY_PLUGIN" = "true" ]; then
+          /usr/share/opensearch/bin/opensearch-plugin remove opensearch-security --purge 2>/dev/null || true
+        fi
+        exec ./opensearch-docker-entrypoint.sh
     environment:
       - TZ=UTC
       # Cluster settings
@@ -24,15 +33,12 @@ services:
       - node.name=opensearch-node1
       - discovery.type=single-node
       - network.host=0.0.0.0
-      # Security
-      - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
-      - DISABLE_INSTALL_DEMO_CONFIG=true
+      # Security - set to true to remove security plugin (no SSL required)
       - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-true}
+      - DISABLE_INSTALL_DEMO_CONFIG=true
       # Performance
       - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP_SIZE:-1g} -Xmx${OPENSEARCH_HEAP_SIZE:-1g}"
       - bootstrap.memory_lock=true
-      # Plugins
-      - plugins.security.disabled=${OPENSEARCH_DISABLE_SECURITY:-true}
     ulimits:
       memlock:
         soft: -1
