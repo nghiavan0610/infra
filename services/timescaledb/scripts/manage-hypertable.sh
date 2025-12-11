@@ -26,6 +26,11 @@ if [ -f "$SCRIPT_DIR/../.env" ]; then
     source "$SCRIPT_DIR/../.env"
 fi
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Arguments
 ACTION="${1:?Usage: $0 <action> <schema.table> [options]}"
 TABLE="${2:?Usage: $0 <action> <schema.table> [options]}"

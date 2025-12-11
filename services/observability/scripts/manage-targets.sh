@@ -18,6 +18,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGETS_DIR="$SCRIPT_DIR/../targets"
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'

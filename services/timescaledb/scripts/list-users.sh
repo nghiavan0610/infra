@@ -13,6 +13,11 @@ if [ -f "$SCRIPT_DIR/../.env" ]; then
     source "$SCRIPT_DIR/../.env"
 fi
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Database config
 DB_NAME="${POSTGRES_DB:-timeseries}"
 DB_ADMIN="${POSTGRES_USER:-postgres}"

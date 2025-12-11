@@ -1,6 +1,13 @@
 # Environment file (contains secrets)
 .env
 
+# Credentials directory (managed by manage.sh)
+.credentials/
+
+# Tenant configs contain passwords (managed by manage.sh)
+config/tenants/*.conf
+!config/tenants/.gitkeep
+
 # Data directories
 data/
 logs/

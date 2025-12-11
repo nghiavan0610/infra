@@ -6,26 +6,24 @@ High-performance messaging server with JetStream persistence for microservices c
 
 - High-performance pub/sub messaging
 - JetStream for persistent streams and queues
-- Multi-account authentication with per-service permissions
-- Request/Reply pattern support
+- **Multi-tenant architecture** with isolated accounts
+- Per-user permissions (publish/subscribe restrictions)
+- Easy tenant management via CLI script
 - Prometheus metrics via Surveyor
-- Production-optimized configuration
 
 ## Quick Start
 
 ```bash
-# Configure
-cp .env.example .env
-nano .env  # Update credentials
+# 1. Setup (from infra root)
+cd /opt/infra
+./setup.sh  # Generates NATS_SYS_PASSWORD
 
-# Start NATS
-docker compose up -d
+# 2. Create your first tenant
+cd services/nats
+./manage.sh add-tenant myapp
 
-# Or use the CLI
-./scripts/nats-cli.sh start
-
-# Check status
-./scripts/nats-cli.sh status
+# 3. Use the connection URL provided
+# nats://myapp:xxxxx@localhost:4222
 ```
 
 ## Endpoints
@@ -34,167 +32,275 @@ docker compose up -d
 |---------|------|-----|-------------|
 | Client | 4222 | `nats://localhost:4222` | NATS client connections |
 | Monitoring | 8222 | `http://localhost:8222` | HTTP monitoring API |
-| Surveyor | 7777 | `http://localhost:7777` | Prometheus metrics |
+| Surveyor | 7777 | `http://localhost:7777` | Prometheus metrics (optional) |
 
-## CLI Commands
+---
+
+## Tenant Management
+
+Use `manage.sh` to manage tenants and users. All credentials are auto-generated and stored securely.
+
+### Create a Tenant
 
 ```bash
-# Start/Stop
-./scripts/nats-cli.sh start      # Start NATS
-./scripts/nats-cli.sh stop       # Stop NATS
-./scripts/nats-cli.sh restart    # Restart NATS
-
-# Monitoring
-./scripts/nats-cli.sh status     # Show status
-./scripts/nats-cli.sh health     # Health check
-./scripts/nats-cli.sh logs       # Follow logs
-./scripts/nats-cli.sh logs-tail  # Last 50 lines
-./scripts/nats-cli.sh monitor    # Start with Surveyor
-
-# Maintenance
-./scripts/nats-cli.sh backup     # Backup JetStream data
-./scripts/nats-cli.sh test-auth  # Test authentication
-./scripts/nats-cli.sh reset-auth # Regenerate auth config
-./scripts/nats-cli.sh clean      # Remove all data
+./manage.sh add-tenant myapp
 ```
 
-## Authentication
-
-NATS uses multi-account authentication with per-service credentials.
-
-### Configuration Files
-
+Output:
 ```
-config/
-├── nats.conf           # Main NATS configuration
-├── auth.conf           # Generated authentication (from template)
-└── auth.conf.template  # Authentication template with env vars
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Connection Details
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  User:     myapp
+  Password: xK9mN2pQ7rT4wY6z...
+  URL:      nats://myapp:xK9mN2pQ7rT4wY6z...@localhost:4222
+
+  Credentials saved to: .credentials/myapp.env
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Adding a New Service
+### Add User with Permissions
 
-1. Add credentials to `.env`:
 ```bash
-MY_SERVICE_USER=my-service
-MY_SERVICE_PASS=$(openssl rand -base64 24)
+# Add a service user with restricted publish/subscribe permissions
+./manage.sh add-user myapp order-service \
+  --publish "orders.*,events.order.*" \
+  --subscribe "payments.*,inventory.*"
 ```
 
-2. Add to `config/auth.conf.template`:
-```conf
-{
-    user: "${MY_SERVICE_USER}"
-    password: "${MY_SERVICE_PASS}"
-    permissions = {
-        publish = ["my-service.*", "events.my-service.*"]
-        subscribe = ["other-service.*", "_INBOX.*"]
-    }
-}
-```
+### List All Tenants and Users
 
-3. Regenerate auth and restart:
 ```bash
-./scripts/nats-cli.sh reset-auth
+./manage.sh list
 ```
 
-### Service Permissions Example
+Output:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  NATS Tenants and Users
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-| Service | Publish | Subscribe |
-|---------|---------|-----------|
-| teacher-service | `teacher.*`, `events.teacher.*` | `user.query.*`, `events.user.*`, `_INBOX.*` |
-| user-service | `user.*`, `events.user.*` | `teacher.query.*`, `events.teacher.*`, `_INBOX.*` |
-| notification-service | `notifications.*` | `notifications.*`, `events.*` |
+  MYAPP
+    ├─ myapp (full access)
+    ├─ order-service (publish: orders.*, subscribe: payments.*)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
-### Connecting from Applications
+### Show Connection Details
 
-**Node.js:**
+```bash
+# Show tenant admin credentials
+./manage.sh show myapp
+
+# Show specific user credentials
+./manage.sh show myapp order-service
+```
+
+### Remove User or Tenant
+
+```bash
+# Remove a user
+./manage.sh remove-user myapp order-service
+
+# Remove entire tenant (and all users)
+./manage.sh remove-tenant myapp
+```
+
+### All Commands
+
+| Command | Description |
+|---------|-------------|
+| `add-tenant <name> [memory] [storage]` | Create new tenant (default: 64MB, 5GB) |
+| `add-user <tenant> <user> [-p subjects] [-s subjects]` | Add user with permissions |
+| `list` | List all tenants and users |
+| `show <tenant> [user]` | Show connection details |
+| `remove-user <tenant> <user>` | Remove user from tenant |
+| `remove-tenant <tenant>` | Remove tenant and all users |
+| `test <tenant> [user]` | Test connection |
+| `reload` | Rebuild config and restart NATS |
+
+---
+
+## Understanding Tenants, Users, and Permissions
+
+### Tenants (Accounts)
+
+Tenants are **isolated namespaces**. Messages in one tenant cannot be seen by another.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                      NATS Server                        │
+│  ┌───────────────────┐    ┌───────────────────┐        │
+│  │  Tenant: SHOP     │    │  Tenant: BLOG     │        │
+│  │  - orders.*       │    │  - posts.*        │        │
+│  │  - payments.*     │    │  - comments.*     │        │
+│  └───────────────────┘    └───────────────────┘        │
+│          ↑                         ↑                    │
+│          └─── Cannot see each other's messages ───┘    │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Users
+
+Users belong to a tenant and have credentials to connect:
+- **Admin user** (same name as tenant): Full access within tenant
+- **Service users**: Can have restricted permissions
+
+### Permissions
+
+Control what subjects a user can publish to or subscribe from:
+
+```bash
+# order-service can:
+#   - PUBLISH to: orders.*, events.order.*
+#   - SUBSCRIBE to: payments.*, inventory.*
+
+./manage.sh add-user myapp order-service \
+  -p "orders.*,events.order.*" \
+  -s "payments.*,inventory.*"
+```
+
+### Subject Patterns
+
+| Pattern | Matches | Example |
+|---------|---------|---------|
+| `orders.created` | Exact match | `orders.created` |
+| `orders.*` | Single token wildcard | `orders.created`, `orders.shipped` |
+| `orders.>` | Multi-token wildcard | `orders.created`, `orders.item.added` |
+
+---
+
+## Connecting from Applications
+
+### Node.js
+
 ```javascript
 import { connect } from 'nats';
 
 const nc = await connect({
   servers: 'nats://localhost:4222',
-  user: 'my-service',
-  pass: 'my-password'
+  user: 'order-service',
+  pass: process.env.NATS_PASSWORD
 });
 
 // Publish
-nc.publish('events.user.created', JSON.stringify({ id: 1 }));
+nc.publish('orders.created', JSON.stringify({ id: 1, total: 99.99 }));
 
 // Subscribe
-const sub = nc.subscribe('events.*');
+const sub = nc.subscribe('payments.*');
 for await (const msg of sub) {
-  console.log(msg.string());
+  console.log('Payment received:', msg.string());
 }
+
+// Request/Reply
+const response = await nc.request('inventory.check', JSON.stringify({ sku: 'ABC123' }));
+console.log('Stock:', response.string());
 ```
 
-**Python:**
+### Go
+
+```go
+import "github.com/nats-io/nats.go"
+
+nc, _ := nats.Connect("nats://localhost:4222",
+    nats.UserInfo("order-service", os.Getenv("NATS_PASSWORD")))
+
+// Publish
+nc.Publish("orders.created", []byte(`{"id": 1}`))
+
+// Subscribe
+nc.Subscribe("payments.*", func(m *nats.Msg) {
+    fmt.Printf("Payment: %s\n", string(m.Data))
+})
+```
+
+### Python
+
 ```python
 import nats
+import os
 
 nc = await nats.connect(
     servers=["nats://localhost:4222"],
-    user="my-service",
-    password="my-password"
+    user="order-service",
+    password=os.environ["NATS_PASSWORD"]
 )
 
 # Publish
-await nc.publish("events.user.created", b'{"id": 1}')
+await nc.publish("orders.created", b'{"id": 1}')
 
 # Subscribe
 async def handler(msg):
-    print(msg.data.decode())
+    print(f"Payment: {msg.data.decode()}")
 
-await nc.subscribe("events.*", cb=handler)
+await nc.subscribe("payments.*", cb=handler)
 ```
 
-## JetStream
+### Environment Variables
 
-JetStream provides persistent messaging with streams and consumers.
+Load credentials from the generated `.credentials/` files:
+
+```bash
+# Source credentials
+source /opt/infra/services/nats/.credentials/myapp_order-service.env
+
+# Use in your app
+echo $NATS_URL  # nats://order-service:xxxxx@localhost:4222
+```
+
+---
+
+## JetStream (Persistent Messaging)
+
+JetStream adds persistence, exactly-once delivery, and replay capabilities.
 
 ### Configuration
 
-In `nats.conf`:
-```conf
+Default limits in `nats.conf`:
+```
 jetstream {
-    store_dir: "/data/jetstream"
-    max_memory_store: 1GB
-    max_file_store: 50GB
-    sync_interval: "1s"
+    max_memory_store: 256MB   # In-memory streams
+    max_file_store: 10GB      # File-based streams
 }
+```
+
+Per-tenant limits (set when creating tenant):
+```bash
+./manage.sh add-tenant myapp 128MB 10GB
+#                            ↑      ↑
+#                         memory  storage
 ```
 
 ### Creating Streams
 
 ```bash
-# Using nats-box
+# Start nats-box for CLI access
 docker compose --profile tools up -d
 docker exec -it nats-box sh
 
 # Create a stream
-nats stream add EVENTS \
-  --subjects "events.*" \
+nats stream add ORDERS \
+  --subjects "orders.*" \
   --storage file \
-  --replicas 1 \
   --retention limits \
-  --max-msgs 1000000
+  --max-msgs 100000 \
+  --max-age 7d
 ```
+
+---
 
 ## Monitoring
 
-### Built-in Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/healthz` | Health check |
-| `/varz` | Server variables |
-| `/connz` | Connection info |
-| `/subsz` | Subscriptions |
-| `/jsz` | JetStream info |
+### Health Check
 
 ```bash
-# Health check
 curl http://localhost:8222/healthz
+```
 
-# Server info
+### Server Info
+
+```bash
+# General info
 curl http://localhost:8222/varz
 
 # Connections
@@ -206,56 +312,37 @@ curl http://localhost:8222/jsz
 
 ### Prometheus Metrics
 
-Start with Surveyor:
 ```bash
-./scripts/nats-cli.sh monitor
-# Metrics at http://localhost:7777/metrics
+# Start with Surveyor
+docker compose --profile monitoring up -d
+
+# Metrics available at
+curl http://localhost:7777/metrics
 ```
 
 ### Grafana Dashboard
 
 Import dashboard ID: **2279** (NATS Server)
 
-## Configuration
+---
 
-### Key Settings (nats.conf)
+## File Structure
 
-| Setting | Value | Description |
-|---------|-------|-------------|
-| `max_connections` | 10000 | Max client connections |
-| `max_payload` | 1MB | Max message size |
-| `ping_interval` | 20s | Client ping interval |
-| `sync_interval` | 1s | JetStream disk sync |
-
-### Resource Limits (.env)
-
-```bash
-NATS_CPU_LIMIT=2
-NATS_MEMORY_LIMIT=2G
-NATS_JS_MAX_MEMORY=1GB
-NATS_JS_MAX_FILE=50GB
+```
+nats/
+├── manage.sh               # Tenant management CLI
+├── config/
+│   ├── nats.conf           # Server configuration
+│   ├── auth.conf           # Auto-generated auth config
+│   └── tenants/            # Tenant config files
+│       └── .gitkeep
+├── .credentials/           # Generated credentials (gitignored)
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
-## Security
-
-### Port Bindings
-
-All ports bound to localhost only:
-- `127.0.0.1:4222` - Client connections
-- `127.0.0.1:8222` - HTTP monitoring
-- `127.0.0.1:7777` - Surveyor metrics
-
-### TLS (Optional)
-
-Uncomment in `nats.conf`:
-```conf
-tls {
-    cert_file: "/etc/nats/certs/server.crt"
-    key_file: "/etc/nats/certs/server.key"
-    verify: true
-    min_version: "1.2"
-}
-```
+---
 
 ## Troubleshooting
 
@@ -263,46 +350,84 @@ tls {
 
 ```bash
 # Check logs
-./scripts/nats-cli.sh logs
+docker logs nats --tail 50
 
 # Validate config
 docker run --rm -v $(pwd)/config:/etc/nats nats:2.10-alpine \
-  nats-server --config /etc/nats/nats.conf --dry-run
+  nats-server --config /etc/nats/nats.conf -t
 ```
 
 ### Authentication failing
 
 ```bash
-# Test auth setup
-./scripts/nats-cli.sh test-auth
+# Check current auth config
+cat config/auth.conf
 
-# Check auth.conf
-docker exec nats cat /etc/nats/auth.conf
+# Rebuild and reload
+./manage.sh reload
+
+# Test connection
+./manage.sh test myapp
 ```
 
-### JetStream issues
+### JetStream memory error
+
+```
+Error: insufficient memory resources available
+```
+
+Solution: Reduce per-tenant memory limits or increase global limit in `nats.conf`:
+```bash
+# Check current tenant limits
+./manage.sh list
+
+# Create tenant with smaller limits
+./manage.sh add-tenant smallapp 32MB 1GB
+```
+
+### Connection refused
 
 ```bash
-# Check status
-curl http://localhost:8222/jsz
+# Check if NATS is running
+docker ps | grep nats
 
-# Check disk space
-df -h
+# Check port binding
+netstat -tlnp | grep 4222
+
+# Restart
+docker compose restart nats
 ```
 
-## File Structure
+---
 
-```
-nats/
-├── config/
-│   ├── nats.conf           # Main configuration
-│   ├── auth.conf           # Generated auth (gitignored)
-│   └── auth.conf.template  # Auth template
-├── scripts/
-│   ├── nats-cli.sh         # Management CLI
-│   └── start-nats.sh       # Initial setup script
-├── docker-compose.yml
-├── .env.example
-├── .env                    # Credentials (gitignored)
-└── README.md
-```
+## Security Best Practices
+
+1. **Use unique passwords** - Each tenant/user gets auto-generated credentials
+2. **Restrict permissions** - Only grant publish/subscribe access that's needed
+3. **Localhost binding** - Ports are bound to 127.0.0.1 by default
+4. **TLS in production** - Uncomment TLS config in `nats.conf` for encrypted connections
+5. **Backup credentials** - The `.credentials/` directory contains all passwords
+
+---
+
+## Configuration Reference
+
+### Environment Variables (.env)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NATS_SERVER_NAME` | `nats-1` | Server identifier |
+| `NATS_PORT` | `4222` | Client port |
+| `NATS_HTTP_PORT` | `8222` | Monitoring port |
+| `NATS_SYS_PASSWORD` | (generated) | System account password |
+| `NATS_CPU_LIMIT` | `2` | CPU cores limit |
+| `NATS_MEMORY_LIMIT` | `512M` | Container memory limit |
+
+### Server Settings (nats.conf)
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `max_connections` | 10000 | Max concurrent clients |
+| `max_payload` | 1MB | Max message size |
+| `max_memory_store` | 256MB | JetStream memory limit |
+| `max_file_store` | 10GB | JetStream disk limit |

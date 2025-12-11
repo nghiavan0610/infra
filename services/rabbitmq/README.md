@@ -1,269 +1,449 @@
-# RabbitMQ - Production Setup
+# RabbitMQ
 
 High-performance message broker with management UI, dead-letter handling, and Prometheus metrics.
+
+## Features
+
+- AMQP 0-9-1 message broker
+- Management UI with HTTP API
+- **Multi-vhost architecture** (tenant isolation)
+- Per-user permissions (configure/write/read)
+- Easy vhost management via CLI script
+- Built-in Prometheus metrics
+- Dead-letter exchange support
 
 ## Quick Start
 
 ```bash
-# 1. Create environment file
-cp .env.example .env
+# 1. Setup (from infra root)
+cd /opt/infra
+./setup.sh  # Generates admin credentials
 
-# 2. Generate secure credentials
-# Admin password
-openssl rand -base64 24
+# 2. Create your first vhost
+cd services/rabbitmq
+./manage.sh add-vhost myapp
 
-# Erlang cookie (for clustering)
-openssl rand -hex 32
-
-# 3. Edit .env with your values
-nano .env
-
-# 4. Start RabbitMQ
-docker compose up -d
-
-# 5. Access Management UI
-# http://localhost:15672
+# 3. Use the connection URL provided
+# amqp://myapp-admin:xxxxx@localhost:5672/myapp
 ```
 
-## Architecture
+## Endpoints
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       RabbitMQ                              │
-├─────────────────────────────────────────────────────────────┤
-│  Port 5672   │  AMQP - Application connections              │
-│  Port 15672  │  Management UI & HTTP API                    │
-│  Port 9419   │  Prometheus metrics (exporter)               │
-└─────────────────────────────────────────────────────────────┘
-```
+| Service | Port | URL | Description |
+|---------|------|-----|-------------|
+| AMQP | 5672 | `amqp://localhost:5672` | Application connections |
+| Management | 15672 | `http://localhost:15672` | Web UI & HTTP API |
+| Metrics | 15692 | `http://localhost:15692/metrics` | Prometheus metrics |
 
-## Directory Structure
+---
 
-```
-rabbitmq/
-├── docker-compose.yml    # Main compose file
-├── .env.example          # Environment template
-├── .env                  # Your configuration (gitignored)
-├── .gitignore
-├── README.md
-└── config/
-    ├── rabbitmq.conf     # Server configuration
-    ├── definitions.json  # Users, vhosts, policies, exchanges
-    └── enabled_plugins   # Enabled plugins list
+## Vhost Management
+
+Use `manage.sh` to manage vhosts and users. All credentials are auto-generated and stored securely.
+
+### Create a Vhost
+
+```bash
+./manage.sh add-vhost myapp
 ```
 
-## Default Configuration
+Output:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Connection Details
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Vhost:    myapp
+  User:     myapp-admin
+  Password: xK9mN2pQ7rT4wY6z...
+  URL:      amqp://myapp-admin:****@localhost:5672/myapp
 
-### Virtual Hosts
-| VHost | Purpose |
-|-------|---------|
-| `/` | Default (admin only) |
-| `production` | Application workloads |
+  Default exchanges created:
+    - events  (topic)   - for event publishing
+    - commands (direct) - for RPC/commands
+    - dlx (direct)      - dead letter exchange
 
-### Users
-| User | Role | Access |
-|------|------|--------|
-| `admin` | Administrator | Full access to all vhosts |
-| `app` | Application | Read/write to `production` vhost |
-| `monitoring` | Monitoring | Read-only for metrics |
+  Credentials saved to: .credentials/myapp.env
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
 
-### Policies
-| Policy | Pattern | Settings |
-|--------|---------|----------|
-| `default-ttl` | All queues | 24h TTL, 1M max messages, DLX |
-| `dlx-policy` | `dlx.*` | 7 days TTL, 100K max |
-| `ha-policy` | `ha.*` | Mirrored across all nodes |
+### Add User with Permissions
 
-### Exchanges
-| Exchange | Type | Purpose |
-|----------|------|---------|
-| `app.events` | topic | Event broadcasting |
-| `app.commands` | direct | Command routing |
-| `dlx.exchange` | direct | Dead-letter handling |
+```bash
+# Add a worker with limited permissions
+./manage.sh add-user myapp worker \
+  --configure "^worker\." \
+  --write "^jobs\." \
+  --read "^results\."
 
-## Usage Examples
+# Add a monitoring user (read-only)
+./manage.sh add-user myapp monitor -c "" -w "" -r ".*" -t "monitoring"
+```
 
-### Connect from Application
+### List All Vhosts and Users
+
+```bash
+./manage.sh list
+```
+
+Output:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RabbitMQ Vhosts and Users
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  myapp
+    ├─ myapp-admin (full access)
+    ├─ worker (c:^worker\. w:^jobs\. r:^results\.)
+    ├─ monitor (c: w: r:.*)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Show Connection Details
+
+```bash
+# Show vhost admin credentials
+./manage.sh show myapp
+
+# Show specific user credentials
+./manage.sh show myapp worker
+```
+
+### Remove User or Vhost
+
+```bash
+# Remove a user
+./manage.sh remove-user myapp worker
+
+# Remove entire vhost (and all queues/exchanges)
+./manage.sh remove-vhost myapp
+```
+
+### All Commands
+
+| Command | Description |
+|---------|-------------|
+| `add-vhost <name>` | Create vhost with admin user and default exchanges |
+| `add-user <vhost> <user> [options]` | Add user with permissions |
+| `list` | List all vhosts and users |
+| `show <vhost> [user]` | Show connection details |
+| `remove-user <vhost> <user>` | Remove user |
+| `remove-vhost <vhost>` | Remove vhost and all data |
+| `test <vhost> [user]` | Test connection |
+
+---
+
+## Understanding Vhosts, Users, and Permissions
+
+### Vhosts (Virtual Hosts)
+
+Vhosts provide **complete isolation** - separate queues, exchanges, bindings, and permissions.
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     RabbitMQ Server                      │
+│  ┌───────────────────┐    ┌───────────────────┐        │
+│  │  Vhost: /myapp    │    │  Vhost: /shop     │        │
+│  │  - orders queue   │    │  - cart queue     │        │
+│  │  - events exch    │    │  - events exch    │        │
+│  └───────────────────┘    └───────────────────┘        │
+│          ↑                         ↑                    │
+│          └─── Completely isolated ────┘                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Users and Permissions
+
+Users have three permission types (regex patterns):
+
+| Permission | Controls |
+|------------|----------|
+| **Configure** | Create/delete queues, exchanges, bindings |
+| **Write** | Publish to exchanges, bind queues |
+| **Read** | Consume from queues, get bindings |
+
+```bash
+# Full access (default for admin)
+--configure ".*" --write ".*" --read ".*"
+
+# Worker: can only write to jobs.*, read from results.*
+--configure "" --write "^jobs\." --read "^results\."
+
+# Read-only monitoring
+--configure "" --write "" --read ".*"
+```
+
+### Permission Patterns (Regex)
+
+| Pattern | Matches |
+|---------|---------|
+| `.*` | Everything |
+| `""` (empty) | Nothing |
+| `^orders$` | Exact "orders" |
+| `^jobs\.` | Starts with "jobs." |
+| `^(q1\|q2)$` | Either "q1" or "q2" |
+
+---
+
+## Connecting from Applications
+
+### Node.js (amqplib)
+
+```javascript
+const amqp = require('amqplib');
+
+const connection = await amqp.connect(process.env.RABBITMQ_URL);
+// amqp://worker:xxxxx@localhost:5672/myapp
+
+const channel = await connection.createChannel();
+
+// Publish to topic exchange
+channel.publish('events', 'order.created', Buffer.from(JSON.stringify({
+  orderId: '123',
+  total: 99.99
+})));
+
+// Consume from queue
+channel.consume('orders', (msg) => {
+  console.log('Order:', msg.content.toString());
+  channel.ack(msg);
+});
+```
+
+### Python (pika)
 
 ```python
-# Python (pika)
 import pika
+import os
 
-credentials = pika.PlainCredentials('app', 'your_password')
-connection = pika.BlockingConnection(
-    pika.ConnectionParameters(
-        host='localhost',
-        port=5672,
-        virtual_host='production',
-        credentials=credentials
-    )
-)
+url = os.environ['RABBITMQ_URL']
+params = pika.URLParameters(url)
+connection = pika.BlockingConnection(params)
 channel = connection.channel()
 
 # Publish
 channel.basic_publish(
-    exchange='app.events',
+    exchange='events',
     routing_key='order.created',
-    body='{"order_id": "123"}'
+    body='{"orderId": "123"}'
 )
+
+# Consume
+def callback(ch, method, properties, body):
+    print(f"Order: {body}")
+    ch.basic_ack(delivery_tag=method.delivery_tag)
+
+channel.basic_consume(queue='orders', on_message_callback=callback)
+channel.start_consuming()
 ```
 
-```javascript
-// Node.js (amqplib)
-const amqp = require('amqplib');
+### Go (amqp091-go)
 
-const connection = await amqp.connect(
-  'amqp://app:your_password@localhost:5672/production'
-);
-const channel = await connection.createChannel();
+```go
+import amqp "github.com/rabbitmq/amqp091-go"
+
+conn, _ := amqp.Dial(os.Getenv("RABBITMQ_URL"))
+ch, _ := conn.Channel()
 
 // Publish
-channel.publish('app.events', 'order.created', Buffer.from('{"order_id": "123"}'));
+ch.Publish("events", "order.created", false, false, amqp.Publishing{
+    Body: []byte(`{"orderId": "123"}`),
+})
+
+// Consume
+msgs, _ := ch.Consume("orders", "", false, false, false, false, nil)
+for msg := range msgs {
+    fmt.Println("Order:", string(msg.Body))
+    msg.Ack(false)
+}
 ```
 
-### Management CLI
+### Environment Variables
+
+Load credentials from generated `.credentials/` files:
 
 ```bash
-# Enter RabbitMQ container
-docker exec -it rabbitmq bash
-
-# List queues
-rabbitmqctl list_queues -p production
-
-# List connections
-rabbitmqctl list_connections
-
-# Check cluster status
-rabbitmqctl cluster_status
-
-# Add new user
-rabbitmqctl add_user newuser password
-rabbitmqctl set_permissions -p production newuser ".*" ".*" ".*"
+source /opt/infra/services/rabbitmq/.credentials/myapp_worker.env
+echo $RABBITMQ_URL  # amqp://worker:xxxxx@localhost:5672/myapp
 ```
+
+---
+
+## Default Exchanges
+
+Each vhost is created with these exchanges:
+
+| Exchange | Type | Purpose |
+|----------|------|---------|
+| `events` | topic | Event broadcasting (`order.created`, `user.*`) |
+| `commands` | direct | RPC/command routing |
+| `dlx` | direct | Dead-letter exchange |
+
+### Exchange Types
+
+```
+Topic Exchange (events):
+  routing_key: "order.created" → matches "order.*", "#"
+  routing_key: "user.signup"   → matches "user.*", "*.signup"
+
+Direct Exchange (commands):
+  routing_key: "process-order" → exact match only
+```
+
+---
+
+## Dead Letter Handling
+
+Failed messages are automatically routed to the DLX:
+
+```
+┌──────────────┐    reject/expire    ┌─────────────────┐
+│  jobs.queue  │ ─────────────────→  │  dlx.queue      │
+│              │                     │  (inspect later)│
+└──────────────┘                     └─────────────────┘
+```
+
+Configure a queue with DLX:
+
+```javascript
+channel.assertQueue('jobs', {
+  deadLetterExchange: 'dlx',
+  deadLetterRoutingKey: 'dlx',
+  messageTtl: 86400000  // 24h
+});
+```
+
+---
 
 ## Monitoring
 
-### Enable Prometheus Exporter
+### Health Check
 
 ```bash
-docker compose --profile monitoring up -d
+curl -u admin:password http://localhost:15672/api/health/checks/alarms
 ```
 
-### Prometheus Configuration
+### Queue Status
 
-Add to your Prometheus `prometheus.yml`:
-
-```yaml
-scrape_configs:
-  - job_name: 'rabbitmq'
-    static_configs:
-      - targets: ['rabbitmq-exporter:9419']
+```bash
+curl -u admin:password http://localhost:15672/api/queues/myapp
 ```
 
-### Key Metrics
-- `rabbitmq_queue_messages` - Messages in queue
-- `rabbitmq_queue_consumers` - Consumer count
-- `rabbitmq_connections` - Active connections
-- `rabbitmq_channels` - Open channels
+### Prometheus Metrics
+
+Built-in metrics at `http://localhost:15692/metrics`:
+
+```
+# Key metrics
+rabbitmq_queue_messages          # Messages in queue
+rabbitmq_queue_consumers         # Consumer count
+rabbitmq_connections_opened_total # Connection count
+rabbitmq_channel_messages_published_total
+```
 
 ### Grafana Dashboard
+
 Import dashboard ID: **10991** (RabbitMQ Overview)
 
-## Production Checklist
+---
 
-- [ ] Change all default passwords in `.env`
-- [ ] Generate unique Erlang cookie
-- [ ] Configure TLS for AMQP connections
-- [ ] Set up monitoring with Prometheus
-- [ ] Configure alerting for queue depth
-- [ ] Set appropriate memory limits
-- [ ] Enable Traefik for Management UI (optional)
-- [ ] Set up backup for definitions
+## File Structure
 
-## Resource Recommendations
-
-| Environment | CPU | Memory | Disk |
-|-------------|-----|--------|------|
-| Development | 0.5 | 512MB | 1GB |
-| Staging | 1 | 1GB | 10GB |
-| Production | 2+ | 2GB+ | 50GB+ |
-
-## Backup & Restore
-
-### Export Definitions
-
-```bash
-# Export current definitions
-curl -u admin:password http://localhost:15672/api/definitions > backup-definitions.json
+```
+rabbitmq/
+├── manage.sh               # Vhost management CLI
+├── config/
+│   ├── rabbitmq.conf       # Server configuration
+│   ├── definitions.json    # Base definitions
+│   └── enabled_plugins     # Enabled plugins
+├── .credentials/           # Generated credentials (gitignored)
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
-### Import Definitions
-
-```bash
-# Import definitions
-curl -u admin:password -X POST -H "Content-Type: application/json" \
-  -d @backup-definitions.json http://localhost:15672/api/definitions
-```
-
-## TLS Configuration
-
-1. Place certificates in `config/certs/`:
-   - `server.crt` - Server certificate
-   - `server.key` - Private key
-   - `ca.crt` - CA certificate
-
-2. Uncomment TLS section in `rabbitmq.conf`
-
-3. Update docker-compose.yml to mount certs:
-   ```yaml
-   volumes:
-     - ./config/certs:/etc/rabbitmq/certs:ro
-   ```
-
-4. Update application connection strings to use `amqps://`
-
-## Clustering (HA)
-
-For high availability, deploy multiple RabbitMQ nodes:
-
-1. Set same `RABBITMQ_ERLANG_COOKIE` on all nodes
-2. Configure `cluster_formation` in rabbitmq.conf
-3. Use quorum queues (default) for replicated queues
+---
 
 ## Troubleshooting
 
-### Check Logs
+### RabbitMQ won't start
 
 ```bash
-docker compose logs -f rabbitmq
+# Check logs
+docker logs rabbitmq --tail 50
+
+# Check if port is in use
+netstat -tlnp | grep 5672
 ```
 
-### Memory Issues
+### Authentication failed
 
 ```bash
-# Check memory usage
+# Verify credentials
+./manage.sh test myapp
+
+# Check user exists
+curl -u admin:password http://localhost:15672/api/users
+```
+
+### Queue not receiving messages
+
+```bash
+# Check queue bindings
+curl -u admin:password http://localhost:15672/api/queues/myapp/orders/bindings
+
+# Check exchange exists
+curl -u admin:password http://localhost:15672/api/exchanges/myapp
+```
+
+### Memory alarm
+
+```bash
+# Check memory
 docker exec rabbitmq rabbitmqctl status | grep memory
 
-# Force garbage collection
-docker exec rabbitmq rabbitmqctl eval 'garbage_collect().'
+# See what's using memory
+curl -u admin:password http://localhost:15672/api/queues | jq '.[].memory'
 ```
 
-### Connection Issues
+### Purge stuck queue
 
 ```bash
-# List connections
-docker exec rabbitmq rabbitmqctl list_connections
-
-# Check listeners
-docker exec rabbitmq rabbitmqctl listeners
+# DESTRUCTIVE - removes all messages
+docker exec rabbitmq rabbitmqctl purge_queue orders -p myapp
 ```
 
-### Queue Stuck
+---
 
-```bash
-# Purge queue (DESTRUCTIVE)
-docker exec rabbitmq rabbitmqctl purge_queue queue_name -p production
+## Security Best Practices
 
-# Delete queue
-docker exec rabbitmq rabbitmqctl delete_queue queue_name -p production
-```
+1. **Use unique credentials** - Each vhost/user gets auto-generated passwords
+2. **Minimal permissions** - Only grant configure/write/read that's needed
+3. **Localhost binding** - Ports are bound to localhost by default
+4. **TLS in production** - Uncomment TLS config in `rabbitmq.conf`
+5. **Backup credentials** - The `.credentials/` directory contains all passwords
+
+---
+
+## Configuration Reference
+
+### Environment Variables (.env)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RABBITMQ_ADMIN_USER` | `admin` | Admin username |
+| `RABBITMQ_ADMIN_PASS` | (generated) | Admin password |
+| `RABBITMQ_ERLANG_COOKIE` | (generated) | Cluster cookie |
+| `RABBITMQ_PORT` | `5672` | AMQP port |
+| `RABBITMQ_MANAGEMENT_PORT` | `15672` | Management UI port |
+| `RABBITMQ_CPU_LIMIT` | `2` | CPU cores limit |
+| `RABBITMQ_MEMORY_LIMIT` | `1G` | Container memory limit |
+
+### Server Settings (rabbitmq.conf)
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `vm_memory_high_watermark` | 0.7 | Memory threshold (70% of RAM) |
+| `disk_free_limit` | 2GB | Minimum free disk space |
+| `channel_max` | 128 | Max channels per connection |
+| `heartbeat` | 60 | Heartbeat interval (seconds) |
+| `default_queue_type` | quorum | Default queue type (replicated) |

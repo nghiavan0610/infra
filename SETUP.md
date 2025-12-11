@@ -30,7 +30,13 @@ nano services.conf           # Enable services
 ./setup.sh --set-password    # Set admin password
 ./setup.sh                   # Start services
 ./status.sh                  # Verify
-./secure.sh                  # Secure file permissions
+
+# 6. Secure the infrastructure
+./secure.sh                              # Secure file permissions
+sudo bash scripts/audit-access.sh        # Check who has access
+
+# 7. Add team members (optional)
+sudo bash scripts/add-user.sh            # Add users with appropriate access
 ```
 
 ---
@@ -292,15 +298,98 @@ Monitoring & Tools:
   ...
 ```
 
-## Step 6: Access Services
+## Step 6: Secure Infrastructure
 
-### 6.1 Get Credentials
+### 6.1 Secure File Permissions
+
+```bash
+cd /opt/infra
+
+# Secure for your user only (strictest)
+./secure.sh
+
+# Or secure for a group of admins
+./secure.sh --group infra-admins
+
+# Check current permissions
+./secure.sh --check
+```
+
+This sets:
+- Directories: `700` (owner only)
+- Scripts: `700` (owner execute only)
+- Config files: `644` (readable by Docker containers)
+- Sensitive files (.env, .secrets): `600` (owner only)
+
+### 6.2 Audit Current Access
+
+```bash
+sudo bash scripts/audit-access.sh
+```
+
+This shows:
+- Users in docker group (can control ALL containers)
+- Users with sudo access
+- Infrastructure directory permissions
+- Security recommendations
+
+### 6.3 Add Team Members
+
+Use the appropriate user type for each team member:
+
+```bash
+sudo bash scripts/add-user.sh
+```
+
+**User Types:**
+
+| Type | SSH | Sudo | Docker | Use Case |
+|------|-----|------|--------|----------|
+| **1) Developer** | ✅ | ❌ | ❌ | App deployment only |
+| **2) DevOps** | ✅ | ✅ | ❌ | System management (NO Docker) |
+| **3) Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
+
+**Important Security Notes:**
+
+- **Developer**: Can SSH and deploy apps, but cannot access databases or containers directly
+- **DevOps**: Can manage system (packages, firewall, etc.) but CANNOT control Docker containers
+- **Infra Admin**: Full access - only grant to trusted administrators
+
+```bash
+# Example: Add a developer
+sudo bash scripts/add-user.sh
+# Select: 1) Developer
+# Enter username: alice
+# Paste SSH key
+
+# Example: Add an infra admin (requires confirmation)
+sudo bash scripts/add-user.sh
+# Select: 3) Infra Admin
+# Type "yes" to confirm
+```
+
+### 6.4 Remove Docker Access from User
+
+If you need to downgrade a user's access:
+
+```bash
+# Remove from docker group
+sudo gpasswd -d username docker
+
+# User must logout and login for changes to take effect
+```
+
+---
+
+## Step 7: Access Services
+
+### 7.1 Get Credentials
 
 ```bash
 cat .secrets
 ```
 
-### 6.2 Access URLs
+### 7.2 Access URLs
 
 | Service | URL | Notes |
 |---------|-----|-------|
@@ -310,7 +399,7 @@ cat .secrets
 | Uptime Kuma | http://your-ip:3001 | Status page |
 | LangFuse | http://your-ip:3050 | LLM observability |
 
-### 6.3 Default Ports
+### 7.3 Default Ports
 
 | Service | Port |
 |---------|------|
@@ -320,38 +409,91 @@ cat .secrets
 | MongoDB | 27017 |
 | MySQL | 3306 |
 
-## Step 7: Create Database for Your App
+## Step 8: Create Database for Your App
 
-### 7.1 PostgreSQL
+Use the unified `db-cli.sh` to manage users across all database types.
+
+### 8.1 Database CLI Overview
 
 ```bash
-# Create user + database
-./lib/db-cli.sh postgres create-user myapp secretpass123 myapp_db
+# Syntax
+./lib/db-cli.sh <database-type> <command> [args...]
 
-# Output:
-# Connection string:
-#   postgresql://myapp:secretpass123@postgres:5432/myapp_db
+# Or use the symlink
+./scripts/db-cli.sh <database-type> <command> [args...]
 ```
 
-### 7.2 List Users
+**Supported Database Types:**
+
+| Type | Container | Description |
+|------|-----------|-------------|
+| `postgres` | postgres | PostgreSQL single node |
+| `postgres-ha` | postgres-master | PostgreSQL with replica |
+| `timescaledb` | timescaledb | TimescaleDB (time-series) |
+| `mysql` | mysql | MySQL 8.0 |
+| `mongo` | mongo | MongoDB replica set |
+| `clickhouse` | clickhouse | ClickHouse (analytics) |
+
+### 8.2 Create Users
+
+```bash
+# PostgreSQL
+./lib/db-cli.sh postgres create-user myapp secretpass123 myapp_db
+# Output: postgresql://myapp:secretpass123@postgres:5432/myapp_db
+
+# PostgreSQL HA (uses master)
+./lib/db-cli.sh postgres-ha create-user myapp secretpass123 myapp_db
+
+# TimescaleDB
+./lib/db-cli.sh timescaledb create-user myapp secretpass123 myapp_db
+
+# MySQL
+./lib/db-cli.sh mysql create-user myapp secretpass123 myapp_db
+# Output: mysql://myapp:secretpass123@mysql:3306/myapp_db
+
+# MongoDB
+./lib/db-cli.sh mongo create-user myapp secretpass123 myapp_db
+# Output: mongodb://myapp:secretpass123@mongo-primary:27017/myapp_db
+
+# ClickHouse
+./lib/db-cli.sh clickhouse create-user myapp secretpass123 myapp_db
+```
+
+### 8.3 List Users
 
 ```bash
 ./lib/db-cli.sh postgres list-users
+./lib/db-cli.sh mysql list-users
+./lib/db-cli.sh mongo list-users
 ```
 
-### 7.3 Delete User
+### 8.4 Delete User
 
 ```bash
 # Keep database
 ./lib/db-cli.sh postgres delete-user myapp
 
-# Delete database too
+# Delete user AND drop owned databases/schemas
 ./lib/db-cli.sh postgres delete-user myapp --drop-schema
 ```
 
-## Step 8: Deploy Your Application
+### 8.5 Connection Strings
 
-### 8.1 Create docker-compose.yml for Your App
+After creating users, use these connection strings from your app:
+
+| Database | Connection String |
+|----------|-------------------|
+| PostgreSQL | `postgresql://myapp:secret@postgres:5432/myapp_db` |
+| PostgreSQL HA | `postgresql://myapp:secret@postgres-master:5432/myapp_db` |
+| TimescaleDB | `postgresql://myapp:secret@timescaledb:5432/myapp_db` |
+| MySQL | `mysql://myapp:secret@mysql:3306/myapp_db` |
+| MongoDB | `mongodb://myapp:secret@mongo-primary:27017/myapp_db?replicaSet=rs0` |
+| Redis Cache | `redis://:password@redis-cache:6379` |
+| Redis Queue | `redis://:password@redis-queue:6379` |
+
+## Step 9: Deploy Your Application
+
+### 9.1 Create docker-compose.yml for Your App
 
 ```yaml
 # /opt/apps/myapp/docker-compose.yml
@@ -373,22 +515,22 @@ networks:
     external: true
 ```
 
-### 8.2 Start Your App
+### 9.2 Start Your App
 
 ```bash
 cd /opt/apps/myapp
 docker compose up -d
 ```
 
-### 8.3 Connect to Observability (Optional)
+### 9.3 Connect to Observability (Optional)
 
 ```bash
 /opt/infra/lib/app-cli.sh connect myapp --port 8080
 ```
 
-## Step 9: Setup Domain & SSL (Optional)
+## Step 10: Setup Domain & SSL (Optional)
 
-### 9.1 Configure Traefik
+### 10.1 Configure Traefik
 
 Edit `services/traefik/.env`:
 
@@ -399,11 +541,12 @@ nano .env
 ```
 
 Set your email for Let's Encrypt:
+
 ```ini
 TRAEFIK_ACME_EMAIL=your@email.com
 ```
 
-### 9.2 Add Labels to Your App
+### 10.2 Add Labels to Your App
 
 ```yaml
 services:
@@ -414,16 +557,17 @@ services:
       - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
 ```
 
-### 9.3 Update DNS
+### 10.3 Update DNS
 
 Point your domain to your server IP:
-```
+
+```text
 app.yourdomain.com  →  A  →  your-server-ip
 ```
 
-## Step 10: Setup Backups (Recommended)
+## Step 11: Setup Backups (Recommended)
 
-### 10.1 Configure Backup Service
+### 11.1 Configure Backup Service
 
 ```bash
 cd /opt/infra/services/backup
@@ -432,6 +576,7 @@ nano .env
 ```
 
 Set backup destination (S3, local, etc.):
+
 ```ini
 RESTIC_PASSWORD=your-backup-password
 RESTIC_REPOSITORY=s3:s3.amazonaws.com/your-bucket
@@ -439,7 +584,7 @@ AWS_ACCESS_KEY_ID=xxx
 AWS_SECRET_ACCESS_KEY=xxx
 ```
 
-### 10.2 Enable Backup
+### 11.2 Enable Backup
 
 ```bash
 # Edit services.conf
@@ -450,7 +595,101 @@ nano /opt/infra/services.conf
 ./setup.sh
 ```
 
+## Step 12: Production Checklist
+
+Before going live, run the production readiness checklist:
+
+```bash
+bash scripts/production-checklist.sh
+```
+
+This validates:
+
+- **Security**: Admin password, file permissions, SSH hardening, firewall, brute-force protection
+- **Services**: All enabled services running and healthy
+- **Backups**: Backup service configured with repository and password
+- **Monitoring**: Prometheus, Grafana, Alertmanager, Loki running
+- **SSL/TLS**: Let's Encrypt configured, ACME certificate store exists
+- **Resources**: Disk usage < 85%, memory usage < 90%
+- **Updates**: Auto security updates enabled
+
+Exit codes:
+
+- `0` = Ready for production (or minor warnings)
+- `1` = Not ready - fix failed checks first
+
+Example:
+
+```bash
+$ bash scripts/production-checklist.sh
+
+==========================================
+  Production Readiness Checklist
+==========================================
+  Server: my-server
+  Date: Wed Dec 11 10:00:00 UTC 2025
+
+━━━ 1. Security ━━━
+  ✓ Admin password configured
+  ✓ Directory permissions secured (700)
+  ✓ SSH root login disabled
+  ✓ Firewall (UFW) enabled
+  ✓ Fail2ban running
+  ✓ Docker access limited (2 users)
+
+━━━ 2. Core Services ━━━
+  ✓ postgres running
+  ✓ redis-cache running
+  ✓ traefik running
+  ✓ grafana running
+
+━━━ 3. Backups ━━━
+  ✓ Backup service running
+  ✓ Backup password configured
+  ✓ Backup repository configured
+
+━━━ 4. Monitoring & Alerts ━━━
+  ✓ Prometheus running
+  ✓ Grafana running
+  ✓ Alertmanager running
+  ! No push notification service → Enable ntfy for alerts
+
+━━━ 5. SSL/TLS ━━━
+  ✓ Let's Encrypt email configured
+  ✓ ACME certificate store exists
+
+━━━ 6. System Resources ━━━
+  ✓ Disk usage OK (45%)
+  ✓ Memory usage OK (62%)
+  ℹ Docker disk usage: 12.5GB
+
+━━━ 7. Updates ━━━
+  ✓ Auto security updates enabled (apt)
+
+==========================================
+  Summary
+==========================================
+  Total checks: 18
+  Passed: 17
+  Failed: 0
+  Warnings: 1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  READY FOR PRODUCTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
 ## Troubleshooting
+
+### Forgot Admin Password
+
+If you forgot your infrastructure admin password, reset it with root access:
+
+```bash
+sudo bash scripts/reset-password.sh
+```
+
+This requires root/sudo access (proves you own the server) and lets you set a new password.
 
 ### Service Won't Start
 
@@ -508,15 +747,48 @@ docker system prune -a --volumes
 
 ## Security Checklist
 
-- [ ] Non-root user created
+### Server Security
+
+- [ ] Non-root user created (`vps-initial-setup.sh`)
 - [ ] SSH key authentication only
-- [ ] Firewall enabled (ufw)
-- [ ] Strong passwords in `.secrets`
+- [ ] Custom SSH port (not 22)
+- [ ] Firewall enabled (ufw/firewalld)
+- [ ] Fail2ban or Crowdsec enabled
+- [ ] Auto security updates enabled
+
+### Infrastructure Security
+
+- [ ] Admin password set (`./setup.sh --set-password`)
 - [ ] File permissions secured (`./secure.sh`)
+- [ ] Strong passwords in `.secrets`
 - [ ] Database ports not exposed publicly (127.0.0.1 only)
 - [ ] Traefik SSL configured for public services
-- [ ] Fail2ban or Crowdsec enabled
+
+### Access Control
+
+- [ ] Docker access limited to Infra Admins only
+- [ ] Team members added with correct user type:
+  - Developers: type 1 (SSH only)
+  - DevOps: type 2 (sudo, NO docker)
+  - Infra Admins: type 3 (full access)
+- [ ] Audit access periodically (`scripts/audit-access.sh`)
 - [ ] Regular backups configured
+
+### Verify Security
+
+```bash
+# Run production readiness checklist
+bash scripts/production-checklist.sh
+
+# Check who has Docker access
+sudo bash scripts/audit-access.sh
+
+# Check file permissions
+./secure.sh --check
+
+# List docker group members
+getent group docker
+```
 
 ## Next Steps
 

@@ -19,6 +19,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_ROOT="$(dirname "$SCRIPT_DIR")"
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Load environment
 if [[ -f "${BACKUP_ROOT}/.env" ]]; then
     set -a

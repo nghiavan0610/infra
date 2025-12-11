@@ -1,6 +1,9 @@
 # Environment file (contains secrets)
 .env
 
+# Credentials directory (managed by manage.sh)
+.credentials/
+
 # Data directories
 data/
 logs/

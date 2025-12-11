@@ -19,6 +19,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RULES_DIR="$SCRIPT_DIR/../config/alerting-rules"
 ENV_FILE="$SCRIPT_DIR/../.env"
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Alert categories mapping
 declare -A ALERTS=(
     ["infrastructure"]="01-infrastructure.yml"

@@ -5,12 +5,7 @@
   "product_version": "4.0.0",
   "users": [],
   "vhosts": [
-    {
-      "name": "/"
-    },
-    {
-      "name": "production"
-    }
+    {"name": "/"}
   ],
   "permissions": [],
   "topic_permissions": [],
@@ -18,96 +13,11 @@
   "global_parameters": [
     {
       "name": "cluster_name",
-      "value": "rabbitmq-prod"
+      "value": "rabbitmq-cluster"
     }
   ],
-  "policies": [
-    {
-      "vhost": "production",
-      "name": "default-ttl",
-      "pattern": "^(?!dlx\\.).*",
-      "apply-to": "queues",
-      "definition": {
-        "message-ttl": 86400000,
-        "max-length": 1000000,
-        "overflow": "reject-publish",
-        "dead-letter-exchange": "dlx.exchange",
-        "dead-letter-routing-key": "dlx"
-      },
-      "priority": 0
-    },
-    {
-      "vhost": "production",
-      "name": "dlx-policy",
-      "pattern": "^dlx\\..*",
-      "apply-to": "queues",
-      "definition": {
-        "message-ttl": 604800000,
-        "max-length": 100000,
-        "overflow": "drop-head"
-      },
-      "priority": 1
-    },
-    {
-      "vhost": "production",
-      "name": "ha-policy",
-      "pattern": "^ha\\..*",
-      "apply-to": "queues",
-      "definition": {
-        "ha-mode": "all",
-        "ha-sync-mode": "automatic"
-      },
-      "priority": 2
-    }
-  ],
-  "queues": [
-    {
-      "name": "dlx.queue",
-      "vhost": "production",
-      "durable": true,
-      "auto_delete": false,
-      "arguments": {
-        "x-queue-type": "classic"
-      }
-    }
-  ],
-  "exchanges": [
-    {
-      "name": "dlx.exchange",
-      "vhost": "production",
-      "type": "direct",
-      "durable": true,
-      "auto_delete": false,
-      "internal": false,
-      "arguments": {}
-    },
-    {
-      "name": "app.events",
-      "vhost": "production",
-      "type": "topic",
-      "durable": true,
-      "auto_delete": false,
-      "internal": false,
-      "arguments": {}
-    },
-    {
-      "name": "app.commands",
-      "vhost": "production",
-      "type": "direct",
-      "durable": true,
-      "auto_delete": false,
-      "internal": false,
-      "arguments": {}
-    }
-  ],
-  "bindings": [
-    {
-      "source": "dlx.exchange",
-      "vhost": "production",
-      "destination": "dlx.queue",
-      "destination_type": "queue",
-      "routing_key": "dlx",
-      "arguments": {}
-    }
-  ]
+  "policies": [],
+  "queues": [],
+  "exchanges": [],
+  "bindings": []
 }

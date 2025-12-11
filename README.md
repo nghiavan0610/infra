@@ -41,12 +41,15 @@ infra/
 │   └── app-cli.sh        # Application registration CLI
 │
 ├── scripts/              # Setup & utility scripts
-│   ├── vps-initial-setup.sh  # First-time VPS hardening
-│   ├── docker-install.sh     # Install Docker
-│   ├── add-user.sh           # Add SSH users to server
-│   ├── vps-health-check.sh   # Server health monitoring
-│   ├── db-cli.sh             # → lib/db-cli.sh (symlink)
-│   └── app-cli.sh            # → lib/app-cli.sh (symlink)
+│   ├── vps-initial-setup.sh    # First-time VPS hardening
+│   ├── docker-install.sh       # Install Docker
+│   ├── add-user.sh             # Add users (Developer/DevOps/Infra Admin)
+│   ├── audit-access.sh         # Audit who has access to what
+│   ├── reset-password.sh       # Reset admin password (requires sudo)
+│   ├── production-checklist.sh # Verify production readiness
+│   ├── vps-health-check.sh     # Server health monitoring
+│   ├── db-cli.sh               # → lib/db-cli.sh (symlink)
+│   └── app-cli.sh              # → lib/app-cli.sh (symlink)
 │
 └── services/             # All services (45+)
     ├── postgres/
@@ -74,6 +77,7 @@ infra/
 | `./secure.sh --check` | Audit current permissions |
 | `./test.sh` | Validate all configurations |
 | `./test.sh --verbose` | Detailed validation output |
+| `bash scripts/production-checklist.sh` | Verify production readiness |
 
 ## Services
 
@@ -277,26 +281,30 @@ chain.run("Hello", callbacks=[handler])
 
 ## Database Management
 
+Unified CLI to manage users across all database types.
+
+### Usage
+
 ```bash
-# Create user with database
-./lib/db-cli.sh postgres create-user myapp secret123 mydb
+# Syntax
+./lib/db-cli.sh <database-type> <command> [args...]
 
-# Create user with custom schema
-./lib/db-cli.sh postgres create-user myapp secret123 mydb custom_schema
-
-# List users
-./lib/db-cli.sh postgres list-users
-
-# Delete user (keeps database)
-./lib/db-cli.sh postgres delete-user myapp
-
-# Delete user AND drop owned databases/schemas
-./lib/db-cli.sh postgres delete-user myapp --drop-schema
-
-# Works with: postgres, postgres-ha, timescaledb, mysql, mongo
+# Or use the symlink
+./scripts/db-cli.sh <database-type> <command> [args...]
 ```
 
-### Database CLI Commands
+### Supported Databases
+
+| Type | Container | Description |
+|------|-----------|-------------|
+| `postgres` | postgres | PostgreSQL single node |
+| `postgres-ha` | postgres-master | PostgreSQL with replica |
+| `timescaledb` | timescaledb | TimescaleDB (time-series) |
+| `mysql` | mysql | MySQL 8.0 |
+| `mongo` | mongo | MongoDB replica set |
+| `clickhouse` | clickhouse | ClickHouse (analytics) |
+
+### Commands
 
 | Command | Description |
 |---------|-------------|
@@ -305,29 +313,40 @@ chain.run("Hello", callbacks=[handler])
 | `delete-user <user> --drop-schema` | Delete user AND drop owned databases/schemas |
 | `list-users` | List all database users |
 
+### Examples
+
+```bash
+# PostgreSQL
+./lib/db-cli.sh postgres create-user myapp secret123 mydb
+./lib/db-cli.sh postgres list-users
+./lib/db-cli.sh postgres delete-user myapp --drop-schema
+
+# MySQL
+./lib/db-cli.sh mysql create-user myapp secret123 mydb
+
+# MongoDB
+./lib/db-cli.sh mongo create-user myapp secret123 mydb
+
+# TimescaleDB
+./lib/db-cli.sh timescaledb create-user myapp secret123 mydb
+
+# ClickHouse
+./lib/db-cli.sh clickhouse create-user myapp secret123 mydb
+```
+
 ### Connection Strings
 
 After creating a user, use these connection strings from your app:
 
-```bash
-# PostgreSQL
-postgresql://myapp:secret@postgres:5432/mydb
-
-# Redis Cache
-redis://:password@redis-cache:6379
-
-# Redis Queue
-redis://:password@redis-queue:6379
-
-# MongoDB
-mongodb://myapp:secret@mongo-primary:27017/mydb?replicaSet=rs0
-
-# MySQL
-mysql://myapp:secret@mysql:3306/mydb
-
-# TimescaleDB
-postgresql://myapp:secret@timescaledb:5432/mydb
-```
+| Database | Connection String |
+|----------|-------------------|
+| PostgreSQL | `postgresql://myapp:secret@postgres:5432/mydb` |
+| PostgreSQL HA | `postgresql://myapp:secret@postgres-master:5432/mydb` |
+| TimescaleDB | `postgresql://myapp:secret@timescaledb:5432/mydb` |
+| MySQL | `mysql://myapp:secret@mysql:3306/mydb` |
+| MongoDB | `mongodb://myapp:secret@mongo-primary:27017/mydb?replicaSet=rs0` |
+| Redis Cache | `redis://:password@redis-cache:6379` |
+| Redis Queue | `redis://:password@redis-queue:6379` |
 
 ## Network Architecture
 
@@ -528,15 +547,77 @@ Run the test script to validate all configurations before deploying:
 
 ## Security
 
+### Security Model Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Security Layers                              │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 1: File Permissions (secure.sh)                          │
+│   - /opt/infra = 700 (owner only)                              │
+│   - .env files = 600                                           │
+│   - Scripts = 700                                              │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 2: Script Authentication (require_auth)                   │
+│   - All management scripts require password                     │
+│   - Even with file access, still need password                  │
+├─────────────────────────────────────────────────────────────────┤
+│ Layer 3: Docker Access Control (add-user.sh)                   │
+│   - Only "Infra Admin" type gets docker group access            │
+│   - DevOps users can't run docker commands                      │
+│   - Developers can't do anything privileged                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### User Types
+
+Add team members with appropriate access levels:
+
+```bash
+sudo bash scripts/add-user.sh
+```
+
+| Type | SSH | Sudo | Docker | Use Case |
+|------|-----|------|--------|----------|
+| **Developer** | ✅ | ❌ | ❌ | Application deployment only |
+| **DevOps** | ✅ | ✅ | ❌ | System management (no container control) |
+| **Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
+
+**Important:** Only grant "Infra Admin" to trusted administrators. Users with Docker access can:
+- Start/stop/remove ANY container
+- Read secrets from running containers
+- Access all databases directly
+
+### Audit Access
+
+Check who has access to what:
+
+```bash
+sudo bash scripts/audit-access.sh
+```
+
+Output shows:
+- Users in docker group (can control containers)
+- Users with sudo access
+- Infrastructure directory permissions
+- Security recommendations
+
 ### Password Protection
 
 All scripts require admin password authentication:
+
 ```bash
 ./setup.sh --set-password  # Set password (first time)
 ./setup.sh                 # Requires password
 ./stop.sh                  # Requires password
 ./status.sh                # Requires password
 ./secure.sh                # Requires password
+```
+
+**Forgot your password?** Reset it with root access:
+
+```bash
+sudo bash scripts/reset-password.sh
 ```
 
 ### File Permissions
@@ -562,3 +643,86 @@ Run `./secure.sh` after setup to restrict access:
 | Sensitive files (.env, .secrets) | 600 | Owner only |
 
 **Why config files are 644:** Docker containers run as different users (postgres, redis, etc.) and need to read mounted config files.
+
+### Recommended Setup Flow
+
+```bash
+# 1. Initial VPS setup (creates your admin user)
+sudo bash scripts/vps-initial-setup.sh
+
+# 2. Install Docker (only your admin user gets docker access)
+sudo bash scripts/docker-install.sh
+
+# 3. Setup infrastructure
+cd /opt/infra
+./setup.sh --set-password
+./setup.sh
+./secure.sh
+
+# 4. Add team members (use appropriate type!)
+sudo bash scripts/add-user.sh
+#   - Developers: type 1 (SSH only)
+#   - DevOps: type 2 (sudo, no docker)
+#   - Infra Admins: type 3 (full access)
+
+# 5. Audit access periodically
+sudo bash scripts/audit-access.sh
+
+# 6. Run production checklist before going live
+bash scripts/production-checklist.sh
+```
+
+## Production Readiness
+
+Before going live, run the production checklist:
+
+```bash
+bash scripts/production-checklist.sh
+```
+
+This checks:
+
+| Category | Checks |
+|----------|--------|
+| **Security** | Admin password, file permissions, SSH hardening, firewall, fail2ban/crowdsec |
+| **Services** | Enabled containers running and healthy |
+| **Backups** | Backup service configured with repository and password |
+| **Monitoring** | Prometheus, Grafana, Alertmanager, Loki running |
+| **SSL/TLS** | Let's Encrypt email configured, ACME store exists |
+| **Resources** | Disk and memory usage within limits |
+| **Updates** | Auto security updates enabled |
+
+Example output:
+
+```
+==========================================
+  Production Readiness Checklist
+==========================================
+
+━━━ 1. Security ━━━
+  ✓ Admin password configured
+  ✓ Directory permissions secured (700)
+  ✓ SSH root login disabled
+  ✓ Firewall (UFW) enabled
+  ✓ Fail2ban running
+
+━━━ 2. Core Services ━━━
+  ✓ postgres running
+  ✓ redis-cache running
+  ✓ traefik running
+
+━━━ 3. Backups ━━━
+  ✓ Backup service running
+  ✓ Backup password configured
+  ✓ Backup repository configured
+
+━━━ Summary ━━━
+  Total checks: 15
+  Passed: 14
+  Failed: 0
+  Warnings: 1
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  READY FOR PRODUCTION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```

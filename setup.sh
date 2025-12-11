@@ -456,6 +456,10 @@ setup_env_file() {
         asynq)
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
             ;;
+        nats)
+            set_if_empty "NATS_SYS_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            # Tenants are managed via: ./services/nats/manage.sh add-tenant <name>
+            ;;
         sentry)
             set_if_empty "SENTRY_SECRET_KEY" "$(openssl rand -hex 32)"
             set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
@@ -989,9 +993,22 @@ show_summary() {
     # Security reminder
     echo -e "${YELLOW}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo -e "${YELLOW}Security Reminder:${NC}"
-    echo "  Run ./secure.sh to restrict file permissions"
-    echo "  This prevents other users from accessing credentials"
+    echo -e "${YELLOW}Security Checklist:${NC}"
+    echo ""
+    echo "  1. Secure file permissions:"
+    echo "     ./secure.sh"
+    echo ""
+    echo "  2. Add team members with appropriate access:"
+    echo "     sudo bash scripts/add-user.sh"
+    echo "       - Developer:   SSH only (no sudo, no docker)"
+    echo "       - DevOps:      SSH + sudo (no docker)"
+    echo "       - Infra Admin: SSH + sudo + docker (full access)"
+    echo ""
+    echo "  3. Audit who has access:"
+    echo "     sudo bash scripts/audit-access.sh"
+    echo ""
+    echo -e "  ${RED}WARNING:${NC} Only 'Infra Admin' users should have Docker access."
+    echo "  Docker users can control ALL containers and read secrets!"
     echo ""
 }
 

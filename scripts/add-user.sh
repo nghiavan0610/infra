@@ -3,6 +3,12 @@
 #######################################
 # Add User Script - For Dev Team Management
 # Quickly add new users with SSH key authentication
+#
+# User Types:
+#   - Developer: SSH access only (no sudo, no docker)
+#   - DevOps: SSH + sudo (can manage system, but NOT docker)
+#   - Infra Admin: SSH + sudo + docker (full infrastructure access)
+#
 # Run as: sudo bash add-user.sh
 #######################################
 
@@ -13,6 +19,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -33,6 +40,51 @@ echo "=========================================="
 echo ""
 
 #######################################
+# Show user type options
+#######################################
+echo -e "${CYAN}User Types:${NC}"
+echo "  1) Developer   - SSH access only (application deployment)"
+echo "  2) DevOps      - SSH + sudo (system management, NO docker)"
+echo "  3) Infra Admin - SSH + sudo + docker (full infrastructure control)"
+echo ""
+read -p "Select user type [1-3]: " USER_TYPE
+
+case "$USER_TYPE" in
+    1)
+        GRANT_SUDO="n"
+        GRANT_DOCKER="n"
+        USER_TYPE_NAME="Developer"
+        ;;
+    2)
+        GRANT_SUDO="y"
+        GRANT_DOCKER="n"
+        USER_TYPE_NAME="DevOps"
+        ;;
+    3)
+        GRANT_SUDO="y"
+        GRANT_DOCKER="y"
+        USER_TYPE_NAME="Infra Admin"
+        echo ""
+        log_warn "INFRA ADMIN WARNING:"
+        echo "  This user will have FULL control over Docker containers."
+        echo "  They can start/stop/remove ANY container, including databases."
+        echo "  Only grant this to trusted infrastructure administrators!"
+        echo ""
+        read -p "Are you sure you want to create an Infra Admin? (yes/no): " CONFIRM
+        if [[ "$CONFIRM" != "yes" ]]; then
+            log_info "Cancelled. Use type 2 (DevOps) for system admins without Docker access."
+            exit 0
+        fi
+        ;;
+    *)
+        log_error "Invalid option. Choose 1, 2, or 3"
+        exit 1
+        ;;
+esac
+
+echo ""
+
+#######################################
 # Get user information
 #######################################
 read -p "Enter username for new team member: " USERNAME
@@ -46,8 +98,8 @@ fi
 # Check if user already exists
 if id "$USERNAME" &>/dev/null; then
     log_error "User $USERNAME already exists!"
-    read -p "Do you want to update this user's SSH key? (y/n): " UPDATE_KEY
-    if [[ "$UPDATE_KEY" != "y" ]]; then
+    read -p "Do you want to update this user's permissions and SSH key? (y/n): " UPDATE_USER
+    if [[ "$UPDATE_USER" != "y" ]]; then
         log_info "Exiting without changes"
         exit 0
     fi
@@ -68,10 +120,6 @@ if [[ "$USER_EXISTS" == "false" ]]; then
         exit 1
     fi
 fi
-
-# Ask about sudo access
-read -p "Grant sudo privileges to $USERNAME? (y/n): " GRANT_SUDO
-GRANT_SUDO=${GRANT_SUDO,,}  # Convert to lowercase
 
 # Get SSH public key
 echo ""
@@ -101,12 +149,40 @@ else
 fi
 
 #######################################
-# Grant sudo access
+# Handle group memberships
 #######################################
+USER_HOME=$(eval echo ~$USERNAME)
+
+# Sudo access
 if [[ "$GRANT_SUDO" == "y" ]]; then
     log_step "Granting sudo privileges to $USERNAME"
     usermod -aG sudo "$USERNAME" 2>/dev/null || usermod -aG wheel "$USERNAME"
     log_info "Sudo privileges granted"
+else
+    # Remove from sudo group if exists (for updates)
+    if [[ "$USER_EXISTS" == "true" ]]; then
+        gpasswd -d "$USERNAME" sudo 2>/dev/null || gpasswd -d "$USERNAME" wheel 2>/dev/null || true
+        log_info "Sudo privileges removed"
+    fi
+fi
+
+# Docker access
+if [[ "$GRANT_DOCKER" == "y" ]]; then
+    if getent group docker &>/dev/null; then
+        log_step "Granting Docker access to $USERNAME"
+        usermod -aG docker "$USERNAME"
+        log_info "Docker access granted"
+    else
+        log_warn "Docker group does not exist. Install Docker first."
+    fi
+else
+    # Remove from docker group if exists (for updates)
+    if [[ "$USER_EXISTS" == "true" ]] && getent group docker &>/dev/null; then
+        if groups "$USERNAME" | grep -q docker; then
+            gpasswd -d "$USERNAME" docker 2>/dev/null || true
+            log_info "Docker access removed"
+        fi
+    fi
 fi
 
 #######################################
@@ -115,7 +191,6 @@ fi
 if [[ -n "$SSH_PUBLIC_KEY" ]]; then
     log_step "Setting up SSH key authentication"
 
-    USER_HOME=$(eval echo ~$USERNAME)
     mkdir -p "$USER_HOME/.ssh"
 
     # If updating existing user, append to authorized_keys
@@ -149,17 +224,26 @@ echo "=========================================="
 echo ""
 echo "User Information:"
 echo "  - Username: $USERNAME"
-echo "  - Home directory: $(eval echo ~$USERNAME)"
+echo "  - Type: $USER_TYPE_NAME"
+echo "  - Home directory: $USER_HOME"
+echo ""
+echo "Permissions:"
 if [[ "$GRANT_SUDO" == "y" ]]; then
-    echo "  - Sudo access: YES"
+    echo -e "  - Sudo access: ${GREEN}YES${NC}"
 else
-    echo "  - Sudo access: NO"
+    echo -e "  - Sudo access: ${YELLOW}NO${NC}"
+fi
+if [[ "$GRANT_DOCKER" == "y" ]]; then
+    echo -e "  - Docker access: ${GREEN}YES${NC} (can manage all containers)"
+else
+    echo -e "  - Docker access: ${YELLOW}NO${NC} (cannot control infrastructure)"
 fi
 if [[ -n "$SSH_PUBLIC_KEY" ]]; then
-    echo "  - SSH key: CONFIGURED"
+    echo -e "  - SSH key: ${GREEN}CONFIGURED${NC}"
 else
-    echo "  - SSH key: NOT SET (password auth only)"
+    echo -e "  - SSH key: ${YELLOW}NOT SET${NC} (password auth only)"
 fi
+
 echo ""
 
 # Show connection command
@@ -170,9 +254,30 @@ log_info "User can now connect with:"
 echo "  ssh -p $SSH_PORT $USERNAME@$HOSTNAME"
 echo ""
 
+# Show what user CAN and CANNOT do
+echo -e "${CYAN}What $USERNAME can do:${NC}"
+echo "  - SSH into the server"
 if [[ "$GRANT_SUDO" == "y" ]]; then
-    log_info "To use sudo:"
-    echo "  sudo whoami"
+    echo "  - Run system commands with sudo"
+    echo "  - Manage system packages, services, firewall"
+fi
+if [[ "$GRANT_DOCKER" == "y" ]]; then
+    echo "  - Start/stop/remove Docker containers"
+    echo "  - Access all infrastructure services"
+    echo "  - Run management scripts in /opt/infra"
 fi
 
+echo ""
+echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
+if [[ "$GRANT_DOCKER" != "y" ]]; then
+    echo "  - Control Docker containers (docker ps, docker stop, etc.)"
+    echo "  - Access infrastructure management scripts"
+fi
+if [[ "$GRANT_SUDO" != "y" ]]; then
+    echo "  - Run commands as root"
+    echo "  - Install system packages"
+    echo "  - Modify system configuration"
+fi
+
+echo ""
 echo "=========================================="

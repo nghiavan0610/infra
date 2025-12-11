@@ -19,6 +19,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MONGO_DIR="$(dirname "$SCRIPT_DIR")"
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Load environment variables
 if [[ -f "$MONGO_DIR/.env" ]]; then
     set -a

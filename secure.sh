@@ -38,6 +38,7 @@ SENSITIVE_PATTERNS=(
     "services/*/.env"
     "services/*/.env.local"
     "services/*/secrets/*"
+    "services/*/.credentials/*"
 )
 
 # Directories that should not be world-readable

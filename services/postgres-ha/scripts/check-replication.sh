@@ -10,6 +10,11 @@ if [ -f "$SCRIPT_DIR/../.env" ]; then
     source "$SCRIPT_DIR/../.env"
 fi
 
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 MASTER_CONTAINER="${MASTER_CONTAINER:-postgres-master}"
 REPLICA_CONTAINER="${REPLICA_CONTAINER:-postgres-replica}"
 ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD:-}"

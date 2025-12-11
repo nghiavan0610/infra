@@ -7,6 +7,13 @@
 
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Require authentication
+INFRA_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$INFRA_ROOT/lib/common.sh"
+require_auth
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -18,8 +25,6 @@ info() { echo -e "${BLUE}[INFO]${NC} $1"; }
 success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARNING]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo ""
 echo "=============================================="

@@ -39,6 +39,9 @@ INFRA_ROOT="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/common.sh"
 source "$SCRIPT_DIR/database.sh"
 
+# Require authentication
+require_auth
+
 # =============================================================================
 # Configuration Loaders
 # =============================================================================
