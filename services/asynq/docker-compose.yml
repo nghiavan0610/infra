@@ -14,6 +14,7 @@
 services:
   asynqmon:
     image: hibiken/asynqmon:latest
+    platform: linux/amd64  # Image only supports amd64, use emulation on ARM
     container_name: asynqmon
     restart: unless-stopped
     environment:

@@ -1,31 +1,9 @@
 {
-  "rabbit_version": "3.13.0",
-  "rabbitmq_version": "3.13.0",
+  "rabbit_version": "4.0.0",
+  "rabbitmq_version": "4.0.0",
   "product_name": "RabbitMQ",
-  "product_version": "3.13.0",
-  "users": [
-    {
-      "name": "admin",
-      "password_hash": "PLACEHOLDER_WILL_BE_OVERWRITTEN_BY_ENV",
-      "hashing_algorithm": "rabbit_password_hashing_sha256",
-      "tags": ["administrator"],
-      "limits": {}
-    },
-    {
-      "name": "app",
-      "password_hash": "PLACEHOLDER_WILL_BE_OVERWRITTEN_BY_ENV",
-      "hashing_algorithm": "rabbit_password_hashing_sha256",
-      "tags": [],
-      "limits": {}
-    },
-    {
-      "name": "monitoring",
-      "password_hash": "PLACEHOLDER_WILL_BE_OVERWRITTEN_BY_ENV",
-      "hashing_algorithm": "rabbit_password_hashing_sha256",
-      "tags": ["monitoring"],
-      "limits": {}
-    }
-  ],
+  "product_version": "4.0.0",
+  "users": [],
   "vhosts": [
     {
       "name": "/"
@@ -34,43 +12,7 @@
       "name": "production"
     }
   ],
-  "permissions": [
-    {
-      "user": "admin",
-      "vhost": "/",
-      "configure": ".*",
-      "write": ".*",
-      "read": ".*"
-    },
-    {
-      "user": "admin",
-      "vhost": "production",
-      "configure": ".*",
-      "write": ".*",
-      "read": ".*"
-    },
-    {
-      "user": "app",
-      "vhost": "production",
-      "configure": "^(app\\..*)$",
-      "write": ".*",
-      "read": ".*"
-    },
-    {
-      "user": "monitoring",
-      "vhost": "/",
-      "configure": "",
-      "write": "",
-      "read": ".*"
-    },
-    {
-      "user": "monitoring",
-      "vhost": "production",
-      "configure": "",
-      "write": "",
-      "read": ".*"
-    }
-  ],
+  "permissions": [],
   "topic_permissions": [],
   "parameters": [],
   "global_parameters": [

@@ -27,12 +27,12 @@ services:
       # Security
       - OPENSEARCH_INITIAL_ADMIN_PASSWORD=${OPENSEARCH_ADMIN_PASSWORD}
       - DISABLE_INSTALL_DEMO_CONFIG=true
-      - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-false}
+      - DISABLE_SECURITY_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-true}
       # Performance
       - "OPENSEARCH_JAVA_OPTS=-Xms${OPENSEARCH_HEAP_SIZE:-1g} -Xmx${OPENSEARCH_HEAP_SIZE:-1g}"
       - bootstrap.memory_lock=true
       # Plugins
-      - plugins.security.disabled=${OPENSEARCH_DISABLE_SECURITY:-false}
+      - plugins.security.disabled=${OPENSEARCH_DISABLE_SECURITY:-true}
     ulimits:
       memlock:
         soft: -1
@@ -84,7 +84,7 @@ services:
       - OPENSEARCH_HOSTS=["http://opensearch:9200"]
       - SERVER_HOST=0.0.0.0
       - SERVER_NAME=opensearch-dashboards
-      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-false}
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=${OPENSEARCH_DISABLE_SECURITY:-true}
     ports:
       - "${OPENSEARCH_DASHBOARDS_PORT:-5601}:5601"
     networks:
