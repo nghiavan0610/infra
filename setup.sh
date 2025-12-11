@@ -502,6 +502,11 @@ setup_env_file() {
             set_if_empty "LANGFUSE_DB_PASS" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
             set_if_empty "LANGFUSE_REDIS_AUTH" "${SHARED_REDIS_PASSWORD}"
             set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            # Use shared ClickHouse password if clickhouse service is enabled
+            if [[ -f "$SCRIPT_DIR/services/clickhouse/.env" ]]; then
+                local CH_PASS=$(grep "^CLICKHOUSE_PASSWORD=" "$SCRIPT_DIR/services/clickhouse/.env" 2>/dev/null | cut -d'=' -f2-)
+                [[ -n "$CH_PASS" ]] && set_if_empty "LANGFUSE_CLICKHOUSE_PASSWORD" "$CH_PASS"
+            fi
             ;;
         opensearch)
             # OpenSearch 2.12+ requires password with complexity: uppercase, lowercase, number, special char

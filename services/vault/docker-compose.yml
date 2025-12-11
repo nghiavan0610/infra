@@ -7,8 +7,8 @@ services:
       - IPC_LOCK
     volumes:
       - ./data:/vault/data
-      - ./config:/vault/config:ro
-      - ./policies:/vault/policies:ro
+      - ./config:/vault/config
+      - ./policies:/vault/policies
     ports:
       - "127.0.0.1:${VAULT_PORT:-8200}:8200"
     environment:
