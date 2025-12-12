@@ -590,8 +590,8 @@ start_service() {
         glitchtip)
             # Create database if using shared postgres
             if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
-                docker exec postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'glitchtip'" | grep -q 1 || \
-                    docker exec postgres psql -U postgres -c "CREATE DATABASE glitchtip;" 2>/dev/null
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'glitchtip'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE glitchtip;" 2>/dev/null || true
                 log_info "GlitchTip database ready"
             fi
             ;;
