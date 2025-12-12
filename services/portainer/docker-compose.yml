@@ -5,8 +5,8 @@ services:
     restart: unless-stopped
     command: -H unix:///var/run/docker.sock
     ports:
-      - "${PORTAINER_PORT:-9443}:9443"     # HTTPS
-      - "${PORTAINER_HTTP_PORT:-9000}:9000" # HTTP (optional)
+      - "${PORTAINER_PORT:-9444}:9443"      # HTTPS (9444 to avoid conflict with Authentik 9443)
+      - "127.0.0.1:${PORTAINER_HTTP_PORT:-9001}:9000"  # HTTP (localhost only)
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - portainer_data:/data

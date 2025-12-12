@@ -167,6 +167,7 @@ declare -A SERVICE_DIRS=(
     ["n8n"]="services/n8n"
     ["faster-whisper"]="services/faster-whisper"
     ["sentry"]="services/sentry"
+    ["glitchtip"]="services/glitchtip"
     ["adminer"]="services/adminer"
     ["mailpit"]="services/mailpit"
     ["portainer"]="services/portainer"
@@ -214,6 +215,7 @@ declare -A SERVICE_CONTAINERS=(
     ["n8n"]="n8n"
     ["faster-whisper"]="faster-whisper"
     ["sentry"]="sentry"
+    ["glitchtip"]="glitchtip"
     ["adminer"]="adminer"
     ["mailpit"]="mailpit"
     ["portainer"]="portainer"
@@ -452,6 +454,12 @@ setup_env_file() {
             set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
             ;;
+        glitchtip)
+            set_if_empty "GLITCHTIP_SECRET_KEY" "$(openssl rand -hex 32)"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            ;;
         mysql)
             set_if_empty "MYSQL_ROOT_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
             set_if_empty "MYSQL_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
@@ -579,6 +587,14 @@ start_service() {
                 return 0
             fi
             ;;
+        glitchtip)
+            # Create database if using shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'glitchtip'" | grep -q 1 || \
+                    docker exec postgres psql -U postgres -c "CREATE DATABASE glitchtip;" 2>/dev/null
+                log_info "GlitchTip database ready"
+            fi
+            ;;
         crowdsec)
             if [[ -f "scripts/setup.sh" ]]; then
                 ./scripts/setup.sh 2>/dev/null || docker compose up -d
@@ -642,7 +658,7 @@ connect_traefik_services() {
         "grafana" "uptime-kuma" "authentik-server" "n8n" "asynqmon"
         "meilisearch" "registry" "portainer" "redisinsight" "gitea"
         "plausible" "drone" "dozzle" "vaultwarden" "ntfy" "healthchecks"
-        "adminer" "sentry"
+        "adminer" "sentry" "glitchtip"
     )
 
     for container in "${web_services[@]}"; do
@@ -976,7 +992,7 @@ run_setup() {
         "fail2ban" "crowdsec" "authentik" "vault"
         # 8. Monitoring & Tools
         "observability" "uptime-kuma" "registry" "n8n" "faster-whisper"
-        "sentry" "adminer" "mailpit" "portainer" "redisinsight"
+        "sentry" "glitchtip" "adminer" "mailpit" "portainer" "redisinsight"
         "plausible" "dozzle" "vaultwarden" "ntfy" "healthchecks"
         # 9. CI/CD
         "github-runner" "gitlab-runner" "gitea" "drone"

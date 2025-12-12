@@ -1,0 +1,120 @@
+# =============================================================================
+# GlitchTip - Self-Hosted Error Tracking (Sentry-compatible)
+# =============================================================================
+# Lightweight, open-source error tracking with ARM64 support.
+# Uses the same Sentry SDKs - drop-in replacement.
+#
+# Prerequisites:
+#   - PostgreSQL running (uses shared postgres)
+#   - Redis running (uses shared redis)
+#
+# Usage:
+#   docker compose up -d
+#
+# Access: http://localhost:8000
+# =============================================================================
+
+services:
+  glitchtip:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST:-redis-cache}:${REDIS_PORT:-6379}/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
+      PORT: 8000
+      EMAIL_URL: ${EMAIL_URL:-consolemail://}
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8000}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-glitchtip@localhost}
+      CELERY_WORKER_AUTOSCALE: "1,3"
+      CELERY_WORKER_MAX_TASKS_PER_CHILD: 10000
+    ports:
+      - "${GLITCHTIP_PORT:-8000}:8000"
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8000/_health/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      - glitchtip-worker
+    networks:
+      - infra
+      - traefik-public
+    labels:
+      # Traefik configuration (uncomment to enable)
+      # - "traefik.enable=true"
+      # - "traefik.http.routers.glitchtip.rule=Host(`${GLITCHTIP_DOMAIN}`)"
+      # - "traefik.http.routers.glitchtip.entrypoints=websecure"
+      # - "traefik.http.routers.glitchtip.tls.certresolver=letsencrypt"
+      # - "traefik.http.services.glitchtip.loadbalancer.server.port=8000"
+      - "traefik.enable=false"
+
+  glitchtip-worker:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-worker
+    restart: unless-stopped
+    command: ./bin/run-celery-with-beat.sh
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${GLITCHTIP_DB_NAME:-glitchtip}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@${REDIS_HOST:-redis-cache}:${REDIS_PORT:-6379}/0
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
+      EMAIL_URL: ${EMAIL_URL:-consolemail://}
+      GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:-http://localhost:8000}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-glitchtip@localhost}
+      CELERY_WORKER_AUTOSCALE: "1,3"
+      CELERY_WORKER_MAX_TASKS_PER_CHILD: 10000
+    volumes:
+      - glitchtip_uploads:/code/uploads
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    networks:
+      - infra
+
+  # Database migration (runs once on first start)
+  glitchtip-migrate:
+    image: glitchtip/glitchtip:latest
+    container_name: glitchtip-migrate
+    restart: "no"
+    command: ./manage.py migrate
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${GLITCHTIP_DB_NAME:-glitchtip}
+      SECRET_KEY: ${GLITCHTIP_SECRET_KEY}
+    networks:
+      - infra
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  glitchtip_uploads:
+    driver: local
+    name: glitchtip_uploads
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  infra:
+    external: true
+    name: infra
+  traefik-public:
+    external: true
+    name: traefik-public
