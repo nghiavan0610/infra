@@ -414,7 +414,9 @@ setup_env_file() {
         local current=$(grep "^${var_name}=" .env 2>/dev/null | cut -d'=' -f2-)
         # Set if empty, contains placeholder text, or is a default value
         if [[ -z "$current" ]] || [[ "$current" =~ ^(change-me|CHANGE_ME|your_|changeme|placeholder) ]]; then
-            $SED_CMD "s|^${var_name}=.*|${var_name}=${value}|" .env
+            # Escape special characters for sed (& \ /)
+            local escaped_value=$(printf '%s\n' "$value" | sed -e 's/[&/\]/\\&/g')
+            $SED_CMD "s|^${var_name}=.*|${var_name}=${escaped_value}|" .env
         fi
     }
 
