@@ -71,6 +71,8 @@ infra/
 | `./setup.sh --minimal` | Start minimal preset |
 | `./setup.sh --standard` | Start standard preset |
 | `./stop.sh` | Stop all services |
+| `./stop.sh --prune` | Stop all + clean unused images/containers |
+| `./stop.sh --prune-all` | Stop all + clean images AND volumes (data loss!) |
 | `./status.sh` | Check service status |
 | `./secure.sh` | Secure file permissions (owner only) |
 | `./secure.sh --group NAME` | Secure for admin group |
@@ -233,21 +235,19 @@ Track LLM calls, costs, and prompts for your AI applications.
 ### Setup
 
 ```bash
-# 1. Enable (requires postgres + redis)
-# Edit services.conf: langfuse=true
+# 1. Enable (uses shared postgres + redis)
+# Edit services.conf:
+#   postgres=true
+#   redis=true
+#   langfuse=true
 
-# 2. Configure
-cp services/langfuse/.env.example services/langfuse/.env
-# Generate secrets:
-echo "LANGFUSE_NEXTAUTH_SECRET=$(openssl rand -base64 32)" >> services/langfuse/.env
-echo "LANGFUSE_SALT=$(openssl rand -base64 32)" >> services/langfuse/.env
-echo "LANGFUSE_DB_PASS=$(openssl rand -base64 24)" >> services/langfuse/.env
-
-# 3. Start
+# 2. Start (setup.sh auto-generates secrets and creates database)
 ./setup.sh
 
-# 4. Open http://localhost:3050 and create account
+# 3. Open http://localhost:3050 and create account
 ```
+
+> **Note:** LangFuse uses shared PostgreSQL and Redis. The database `langfuse` is automatically created by setup.sh.
 
 ### Integration (Python)
 
@@ -347,6 +347,34 @@ After creating a user, use these connection strings from your app:
 | MongoDB | `mongodb://myapp:secret@mongo-primary:27017/mydb?replicaSet=rs0` |
 | Redis Cache | `redis://:password@redis-cache:6379` |
 | Redis Queue | `redis://:password@redis-queue:6379` |
+
+## Shared Services Architecture
+
+Services use shared databases instead of bundling their own. This reduces resource usage and simplifies management.
+
+### Shared Databases
+
+| Shared Service | Used By |
+|----------------|---------|
+| **postgres** | Authentik, Gitea, Healthchecks, LangFuse, Plausible, GlitchTip, n8n |
+| **redis** | Authentik, LangFuse, GlitchTip, Asynq |
+| **clickhouse** | Plausible, LangFuse (optional) |
+
+### How It Works
+
+1. **setup.sh** automatically creates databases for each service in the shared postgres/clickhouse
+2. Services connect via Docker network using container names (e.g., `postgres:5432`)
+3. Credentials are shared via `.env` files (generated from `.env.example`)
+
+### Dependency Legend (in services.conf)
+
+```
+[standalone]     - No dependencies on other services
+[requires: X]    - Must enable service X for this to work
+[uses: X]        - Optionally connects to service X if enabled
+```
+
+Example: `plausible=false  # [requires: postgres, clickhouse]`
 
 ## Network Architecture
 
@@ -500,9 +528,20 @@ mongo=true
 |---------|-----|
 | Grafana | http://localhost:3000 |
 | Prometheus | http://localhost:9090 |
-| Traefik | http://localhost:8080 |
+| Traefik Dashboard | http://localhost:8080 |
 | Uptime Kuma | http://localhost:3001 |
+| Gitea | http://localhost:3002 |
 | LangFuse | http://localhost:3050 |
+| Plausible | http://localhost:8003 |
+| GlitchTip | http://localhost:8001 |
+| Healthchecks | http://localhost:8002 |
+| Drone CI | http://localhost:8082 |
+| Authentik | http://localhost:9000 |
+| Portainer | http://localhost:9444 |
+| Ntfy | http://localhost:8090 |
+| Vaultwarden | http://localhost:8222 |
+| ClickHouse | http://localhost:8123 |
+| Adminer | http://localhost:8081 |
 
 ### Credentials
 After setup, credentials are saved to `.secrets`:
