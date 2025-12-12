@@ -15,13 +15,14 @@ services:
       # Security
       - WEBSOCKET_ENABLED=true
       - LOG_LEVEL=${VAULTWARDEN_LOG_LEVEL:-info}
-      # Email (optional)
-      - SMTP_HOST=${VAULTWARDEN_SMTP_HOST:-}
-      - SMTP_PORT=${VAULTWARDEN_SMTP_PORT:-587}
-      - SMTP_FROM=${VAULTWARDEN_SMTP_FROM:-}
-      - SMTP_SECURITY=${VAULTWARDEN_SMTP_SECURITY:-starttls}
-      - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME:-}
-      - SMTP_PASSWORD=${VAULTWARDEN_SMTP_PASSWORD:-}
+      # Email (optional - set all SMTP vars in .env to enable)
+      # Note: If SMTP_HOST is set, SMTP_FROM must also be set
+      # - SMTP_HOST=${VAULTWARDEN_SMTP_HOST}
+      # - SMTP_PORT=${VAULTWARDEN_SMTP_PORT:-587}
+      # - SMTP_FROM=${VAULTWARDEN_SMTP_FROM}
+      # - SMTP_SECURITY=${VAULTWARDEN_SMTP_SECURITY:-starttls}
+      # - SMTP_USERNAME=${VAULTWARDEN_SMTP_USERNAME}
+      # - SMTP_PASSWORD=${VAULTWARDEN_SMTP_PASSWORD}
     ports:
       - "${VAULTWARDEN_PORT:-8222}:80"
       - "${VAULTWARDEN_WS_PORT:-3012}:3012"

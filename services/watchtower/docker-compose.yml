@@ -4,6 +4,8 @@ services:
     container_name: watchtower
     restart: unless-stopped
     environment:
+      # Docker API version compatibility
+      - DOCKER_API_VERSION=1.44
       # Update schedule (default: daily at 4 AM)
       - WATCHTOWER_SCHEDULE=${WATCHTOWER_SCHEDULE:-0 0 4 * * *}
       # Cleanup old images after update
