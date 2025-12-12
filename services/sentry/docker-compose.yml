@@ -37,7 +37,7 @@ services:
       SENTRY_EMAIL_USE_TLS: ${SMTP_USE_TLS:-false}
       SENTRY_SERVER_EMAIL: ${SENTRY_EMAIL:-sentry@localhost}
     ports:
-      - "127.0.0.1:${SENTRY_PORT:-9000}:9000"
+      - "127.0.0.1:${SENTRY_PORT:-9500}:9000"
     volumes:
       - sentry_data:/var/lib/sentry/files
     deploy:

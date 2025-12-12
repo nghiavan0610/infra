@@ -68,50 +68,10 @@ prometheus.exporter.postgres "main" {
 }
 
 // -----------------------------------------------------------------------------
-// MongoDB Metrics (replaces mongodb_exporter)
-// Set MONGODB_URI in .env to enable
+// Metrics Scraping - Collect from core built-in exporters
 // -----------------------------------------------------------------------------
-prometheus.exporter.mongodb "main" {
-  mongodb_uri = coalesce(env("MONGODB_URI"), "mongodb://mongo:27017")
-  direct_connect = true
-}
-
-// -----------------------------------------------------------------------------
-// MySQL Metrics (replaces mysqld_exporter)
-// Set MYSQL_DSN in .env to enable
-// -----------------------------------------------------------------------------
-prometheus.exporter.mysql "main" {
-  data_source_name = coalesce(env("MYSQL_DSN"), "root:password@tcp(mysql:3306)/")
-}
-
-// -----------------------------------------------------------------------------
-// Memcached Metrics (replaces memcached_exporter)
-// Set MEMCACHED_ADDR in .env to enable
-// -----------------------------------------------------------------------------
-prometheus.exporter.memcached "main" {
-  address = coalesce(env("MEMCACHED_ADDR"), "memcached:11211")
-  timeout = "5s"
-}
-
-// -----------------------------------------------------------------------------
-// Kafka Metrics (replaces kafka_exporter)
-// Set KAFKA_BROKERS in .env to enable
-// -----------------------------------------------------------------------------
-prometheus.exporter.kafka "main" {
-  kafka_uris = [coalesce(env("KAFKA_BROKERS"), "kafka:9092")]
-}
-
-// -----------------------------------------------------------------------------
-// Elasticsearch/OpenSearch Metrics (replaces elasticsearch_exporter)
-// Set ELASTICSEARCH_URL in .env to enable
-// -----------------------------------------------------------------------------
-prometheus.exporter.elasticsearch "main" {
-  address = coalesce(env("ELASTICSEARCH_URL"), "http://opensearch:9200")
-}
-
-// -----------------------------------------------------------------------------
-// Metrics Scraping - Collect from all built-in exporters
-// -----------------------------------------------------------------------------
+// NOTE: Only include exporters for services that are always running.
+// Other services use prometheus.scrape which handles unavailable services gracefully.
 prometheus.scrape "integrations" {
   targets = concat(
     prometheus.exporter.unix.host.targets,
@@ -119,11 +79,6 @@ prometheus.scrape "integrations" {
     prometheus.exporter.redis.cache.targets,
     prometheus.exporter.redis.queue.targets,
     prometheus.exporter.postgres.main.targets,
-    prometheus.exporter.mongodb.main.targets,
-    prometheus.exporter.mysql.main.targets,
-    prometheus.exporter.memcached.main.targets,
-    prometheus.exporter.kafka.main.targets,
-    prometheus.exporter.elasticsearch.main.targets,
   )
   forward_to = [prometheus.remote_write.default.receiver]
   scrape_interval = "15s"
@@ -437,7 +392,7 @@ loki.write "default" {
     url = coalesce(env("LOKI_URL"), "http://loki:3100/loki/api/v1/push")
 
     batch_wait = "1s"
-    batch_size = 1048576
+    batch_size = "1MiB"
   }
 }
 

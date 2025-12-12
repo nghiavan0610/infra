@@ -694,28 +694,10 @@ register_monitoring_targets() {
                 set_obs_env "REDIS_QUEUE_ADDR" "redis:6379"
                 log_info "  → Redis configured for Alloy"
                 ;;
-            mongo)
-                local mongo_user="${SHARED_MONGO_USER:-mongo}"
-                local mongo_pass="${SHARED_MONGO_PASSWORD:-mongo}"
-                set_obs_env "MONGODB_URI" "mongodb://${mongo_user}:${mongo_pass}@mongo:27017"
-                log_info "  → MongoDB configured for Alloy"
-                ;;
-            mysql)
-                local mysql_pass=$(grep "^MYSQL_ROOT_PASSWORD=" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2-)
-                [[ -n "$mysql_pass" ]] && set_obs_env "MYSQL_DSN" "root:${mysql_pass}@tcp(mysql:3306)/"
-                log_info "  → MySQL configured for Alloy"
-                ;;
-            memcached)
-                set_obs_env "MEMCACHED_ADDR" "memcached:11211"
-                log_info "  → Memcached configured for Alloy"
-                ;;
-            kafka)
-                set_obs_env "KAFKA_BROKERS" "kafka:9092"
-                log_info "  → Kafka configured for Alloy"
-                ;;
-            opensearch)
-                set_obs_env "ELASTICSEARCH_URL" "http://opensearch:9200"
-                log_info "  → OpenSearch configured for Alloy"
+            # NOTE: MongoDB, MySQL, Memcached, Kafka, OpenSearch require external exporters
+            # These are scraped via prometheus.scrape if you deploy their exporters separately
+            mongo|mysql|memcached|kafka|opensearch)
+                log_info "  → ${service} uses external exporter (deploy separately if needed)"
                 ;;
             nats)
                 set_obs_env "NATS_ADDR" "nats:8222"

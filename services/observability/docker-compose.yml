@@ -37,16 +37,11 @@ services:
       - PROMETHEUS_URL=http://prometheus:9090/api/v1/write
       - LOKI_URL=http://loki:3100/loki/api/v1/push
       - TEMPO_URL=tempo:4317
-      # Database exporters (Alloy built-in)
+      # Core database exporters (Alloy built-in)
       - REDIS_PASSWORD=${REDIS_PASSWORD:-}
       - REDIS_CACHE_ADDR=${REDIS_CACHE_ADDR:-redis-cache:6379}
       - REDIS_QUEUE_ADDR=${REDIS_QUEUE_ADDR:-redis-queue:6379}
       - POSTGRES_DSN=${POSTGRES_DSN:-}
-      - MONGODB_URI=${MONGODB_URI:-}
-      - MYSQL_DSN=${MYSQL_DSN:-}
-      - MEMCACHED_ADDR=${MEMCACHED_ADDR:-}
-      - KAFKA_BROKERS=${KAFKA_BROKERS:-}
-      - ELASTICSEARCH_URL=${ELASTICSEARCH_URL:-}
       # Services with built-in metrics (Alloy scrapes directly)
       - NATS_ADDR=${NATS_ADDR:-}
       - RABBITMQ_ADDR=${RABBITMQ_ADDR:-}
