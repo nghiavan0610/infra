@@ -470,8 +470,8 @@ setup_env_file() {
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
             ;;
         authentik)
-            set_if_empty "AUTHENTIK_SECRET_KEY" "$(openssl rand -base64 60)"
-            set_if_empty "AUTHENTIK_BOOTSTRAP_PASSWORD" "$(openssl rand -base64 16)"
+            set_if_empty "AUTHENTIK_SECRET_KEY" "$(openssl rand -base64 60 | tr -d '\n')"
+            set_if_empty "AUTHENTIK_BOOTSTRAP_PASSWORD" "$(openssl rand -base64 16 | tr -d '\n')"
             # Use shared PostgreSQL
             set_if_empty "POSTGRES_HOST" "postgres"
             set_if_empty "POSTGRES_PORT" "5432"
@@ -501,8 +501,8 @@ setup_env_file() {
             set_if_empty "GITEA_DB_NAME" "gitea"
             ;;
         plausible)
-            set_if_empty "PLAUSIBLE_SECRET_KEY" "$(openssl rand -base64 48)"
-            set_if_empty "PLAUSIBLE_TOTP_KEY" "$(openssl rand -base64 32)"
+            set_if_empty "PLAUSIBLE_SECRET_KEY" "$(openssl rand -base64 48 | tr -d '\n')"
+            set_if_empty "PLAUSIBLE_TOTP_KEY" "$(openssl rand -base64 32 | tr -d '\n')"
             # Use shared PostgreSQL
             set_if_empty "POSTGRES_HOST" "postgres"
             set_if_empty "POSTGRES_PORT" "5432"
@@ -518,10 +518,10 @@ setup_env_file() {
             set_if_empty "DRONE_RPC_SECRET" "$(openssl rand -hex 16)"
             ;;
         vaultwarden)
-            set_if_empty "VAULTWARDEN_ADMIN_TOKEN" "$(openssl rand -base64 48)"
+            set_if_empty "VAULTWARDEN_ADMIN_TOKEN" "$(openssl rand -base64 48 | tr -d '\n')"
             ;;
         healthchecks)
-            set_if_empty "HEALTHCHECKS_SECRET_KEY" "$(openssl rand -base64 32)"
+            set_if_empty "HEALTHCHECKS_SECRET_KEY" "$(openssl rand -base64 32 | tr -d '\n')"
             # Use shared PostgreSQL
             set_if_empty "POSTGRES_HOST" "postgres"
             set_if_empty "POSTGRES_PORT" "5432"
@@ -530,8 +530,8 @@ setup_env_file() {
             set_if_empty "HEALTHCHECKS_DB_NAME" "healthchecks"
             ;;
         langfuse)
-            set_if_empty "LANGFUSE_NEXTAUTH_SECRET" "$(openssl rand -base64 32)"
-            set_if_empty "LANGFUSE_SALT" "$(openssl rand -base64 32)"
+            set_if_empty "LANGFUSE_NEXTAUTH_SECRET" "$(openssl rand -base64 32 | tr -d '\n')"
+            set_if_empty "LANGFUSE_SALT" "$(openssl rand -base64 32 | tr -d '\n')"
             # Use shared PostgreSQL
             set_if_empty "POSTGRES_HOST" "postgres"
             set_if_empty "POSTGRES_PORT" "5432"
