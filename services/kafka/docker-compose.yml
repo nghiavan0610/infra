@@ -19,7 +19,7 @@ services:
   # Kafka Broker (KRaft Mode - Combined Controller + Broker)
   # ===========================================================================
   kafka:
-    image: bitnami/kafka:3.9.0
+    image: bitnami/kafka:3.7
     container_name: kafka
     hostname: kafka
     restart: unless-stopped
