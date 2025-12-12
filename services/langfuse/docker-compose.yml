@@ -83,7 +83,13 @@ services:
           cpus: "0.5"
           memory: 512M
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget -q --spider http://$(hostname):3000/api/public/health"]
+      test:
+        [
+          "CMD",
+          "sh",
+          "-c",
+          "wget -q --spider http://$(hostname):3000/api/public/health",
+        ]
       interval: 30s
       timeout: 10s
       retries: 5
