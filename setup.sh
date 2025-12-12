@@ -575,7 +575,7 @@ start_service() {
                 return 0
             fi
             ;;
-        garage)
+        garage|registry)
             if [[ -f "setup.sh" ]]; then
                 ./setup.sh 2>/dev/null || docker compose up -d
                 cd "$SCRIPT_DIR"
