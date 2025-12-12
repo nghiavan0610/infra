@@ -50,7 +50,7 @@ groups:
 
       # Container Not Running
       - alert: ContainerNotRunning
-        expr: absent(container_last_seen{name=~"prometheus|loki|tempo|grafana|otel-collector|node-exporter|cadvisor"})
+        expr: absent(container_last_seen{name=~"prometheus|loki|tempo|grafana|alloy|alertmanager"})
         for: 2m
         labels:
           severity: critical

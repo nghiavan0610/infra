@@ -17,7 +17,7 @@
 
 services:
   sentry:
-    image: sentry:24.1.0
+    image: getsentry/sentry:24.1.0
     container_name: sentry
     restart: unless-stopped
     environment:
@@ -77,7 +77,7 @@ services:
       - sentry-worker
 
   sentry-cron:
-    image: sentry:24.1.0
+    image: getsentry/sentry:24.1.0
     container_name: sentry-cron
     restart: unless-stopped
     command: run cron
@@ -109,7 +109,7 @@ services:
       - traefik-public
 
   sentry-worker:
-    image: sentry:24.1.0
+    image: getsentry/sentry:24.1.0
     container_name: sentry-worker
     restart: unless-stopped
     command: run worker

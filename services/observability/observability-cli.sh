@@ -223,8 +223,8 @@ case "${1:-}" in
     logs-alertmgr)
         show_logs_service "alertmanager"
         ;;
-    logs-otel)
-        show_logs_service "otel-collector"
+    logs-alloy)
+        show_logs_service "alloy"
         ;;
     urls)
         show_urls

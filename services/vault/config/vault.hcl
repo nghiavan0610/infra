@@ -24,3 +24,9 @@ api_addr = "http://127.0.0.1:8200"
 
 # Logging
 log_level = "info"
+
+# Telemetry (Prometheus metrics at /v1/sys/metrics)
+telemetry {
+  prometheus_retention_time = "60s"
+  disable_hostname = true
+}

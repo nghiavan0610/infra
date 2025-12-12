@@ -12,8 +12,9 @@ Complete observability solution with metrics, logs, traces, and alerting for pro
                                 │ OTLP (gRPC/HTTP)
                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        OpenTelemetry Collector                               │
-│                    (Central telemetry pipeline)                              │
+│                           Grafana Alloy                                      │
+│            (Unified collector: metrics, logs, traces)                        │
+│   Replaces: node-exporter, cadvisor, redis-exporter, otel-collector, promtail│
 └──────┬──────────────────┬──────────────────┬────────────────────────────────┘
        │                  │                  │
        ▼                  ▼                  ▼
@@ -72,64 +73,70 @@ docker compose up -d
 
 | Component | Port | Purpose |
 |-----------|------|---------|
-| OpenTelemetry Collector | 4317 (gRPC), 4318 (HTTP) | Receives telemetry from apps |
+| Grafana Alloy | 4317 (gRPC), 4318 (HTTP), 12345 (UI) | Unified telemetry collector |
 | Prometheus | 9090 | Metrics storage & alerting |
 | Loki | 3100 | Log aggregation |
 | Tempo | 3200 | Distributed tracing |
 | Grafana | 3000 | Visualization |
 | Alertmanager | 9093 | Alert routing & notifications |
-| Node Exporter | 9100 | Host metrics (CPU, RAM, disk) |
-| cAdvisor | 8080 | Container metrics |
-| Promtail | 9080 | Log collection |
-| Redis Exporter | 9121 | Redis metrics (multi-target) |
+
+**Alloy collects:**
+- Host metrics (CPU, RAM, disk) - replaces node-exporter
+- Container metrics - replaces cadvisor
+- Redis metrics - replaces redis-exporter
+- Docker logs - replaces promtail
+- OTLP traces/metrics - replaces otel-collector
 
 **External Services Monitored:**
-| Service | Metrics Port | Notes |
-|---------|--------------|-------|
-| PostgreSQL | 9187+ | Via postgres_exporter |
-| Redis | 6379 | Via redis-exporter (multi-target) |
-| NATS | 8222 | Built-in monitoring port |
-| MongoDB | 9216 | Via mongodb_exporter |
-| RabbitMQ | 15692 | Built-in Prometheus plugin |
-| Traefik | 8080 | Built-in metrics |
-| Garage | 3903 | Bearer token required |
+| Service | Notes |
+|---------|-------|
+| PostgreSQL | Via Alloy (configure POSTGRES_DSN) |
+| Redis | Via Alloy (configure REDIS_*) |
+| NATS | Built-in monitoring port 8222 |
+| MongoDB | Via Alloy (uncomment in alloy.river) |
+| RabbitMQ | Built-in Prometheus plugin :15692 |
+| Traefik | Built-in metrics :8080 |
+| Garage | Bearer token required :3903 |
 
 ---
 
 ## Database Monitoring
 
-### How It Works
+### PostgreSQL & Redis (via Alloy)
 
-Database targets are managed dynamically via JSON files. Prometheus auto-reloads every 30 seconds - no restart needed.
+PostgreSQL and Redis are monitored directly by Alloy. Configure in `.env`:
+
+```bash
+# PostgreSQL
+POSTGRES_DSN=postgresql://user:pass@postgres:5432/dbname?sslmode=disable
+
+# Redis
+REDIS_PASSWORD=yourpassword
+REDIS_CACHE_ADDR=redis-cache:6379
+REDIS_QUEUE_ADDR=redis-queue:6379
+```
+
+### Other Services (via file_sd_configs)
+
+Other services use dynamic JSON target files. Prometheus auto-reloads every 30 seconds.
 
 ```
 targets/
-├── postgres.json    # PostgreSQL exporter targets
-└── redis.json       # Redis instance targets
+├── nats.json        # NATS targets
+├── rabbitmq.json    # RabbitMQ targets
+├── mongodb.json     # MongoDB targets
+├── traefik.json     # Traefik targets
+└── garage.json      # Garage S3 targets
 ```
 
-### PostgreSQL Monitoring
-
-Each PostgreSQL instance needs its own exporter. Add the exporter to your database stack:
-
-**Step 1: Enable exporter in your database stack**
-
-```bash
-# Example for postgres-single
-cd /path/to/postgres-single
-docker compose --profile monitoring up -d
-```
-
-Or add the exporter manually (see `templates/postgres-exporter.yml`).
-
-**Step 2: Register with Prometheus**
+### Adding Targets
 
 ```bash
 cd /path/to/observability
 
-# Add target
-./scripts/manage-targets.sh add postgres \
-  --name postgres-single \
+# Add NATS target
+./scripts/manage-targets.sh add nats \
+  --name nats-main \
   --host host.docker.internal \
   --port 9187
 
@@ -528,8 +535,8 @@ Go to Grafana > Dashboards > Import, use these IDs:
 | **Security** | security.json | Fail2ban & Crowdsec intrusion prevention |
 | **Backup** | backup.json | Restic backup status & snapshots |
 | Observability Overview | observability-overview.json | Stack health status |
-| Node Exporter | node-exporter.json | Host metrics (CPU, RAM, disk) |
-| Docker Containers | docker-containers.json | Container resources |
+| Host Metrics | node-exporter.json | Host metrics (CPU, RAM, disk) via Alloy |
+| Docker Containers | docker-containers.json | Container resources via Alloy |
 | Task Queue | task-queue.json | Asynq/BullMQ metrics |
 | PostgreSQL | postgresql.json | Connections, transactions, I/O |
 | Redis | redis.json | Memory, operations, keys |
@@ -645,9 +652,12 @@ ls -la targets/
 
 ```bash
 # Test connectivity from inside observability network
-docker compose exec redis-exporter wget -qO- http://host.docker.internal:6379
+docker compose exec alloy wget -qO- http://host.docker.internal:6379
 
-# Check exporter logs
+# Check Alloy logs (unified collector)
+docker logs alloy
+
+# Check postgres exporter logs
 docker logs postgres-single-exporter
 ```
 
@@ -698,21 +708,18 @@ observability/
 │   │   ├── 06-nats.yml
 │   │   ├── 07-task-queue.yml
 │   │   └── 08-application.yml
+│   ├── alloy.river             # Alloy unified collector config
 │   ├── grafana-datasources.yaml # Grafana datasource config
 │   ├── loki-config.yaml        # Loki configuration
-│   ├── otel-collector-config.yaml
 │   ├── prometheus.yml          # Prometheus configuration
-│   ├── promtail-config.yaml    # Log collection config
 │   └── tempo-config.yaml       # Tempo configuration
 ├── targets/
-│   ├── postgres.json           # PostgreSQL targets (dynamic)
-│   ├── redis.json              # Redis targets (dynamic)
+│   ├── nats.json               # NATS targets (dynamic)
+│   ├── rabbitmq.json           # RabbitMQ targets
 │   ├── garage.json             # Garage S3 storage targets
 │   └── ...                     # Other service targets
 ├── secrets/
 │   └── garage-metrics-token    # Garage bearer token (gitignored)
-├── templates/
-│   └── postgres-exporter.yml   # Template for adding to DB stacks
 ├── scripts/
 │   ├── manage-targets.sh       # Add/remove monitoring targets
 │   ├── toggle-alerts.sh        # Enable/disable alert categories

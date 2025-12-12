@@ -384,7 +384,7 @@ Services are accessible by container name within the network:
 APP_NAME=myapi
 PORT=8080
 DATABASE_URL=postgresql://myapi:secret@postgres:5432/myapi_db
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
 OTEL_SERVICE_NAME=myapi
 ```
 

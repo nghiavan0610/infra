@@ -1,0 +1,484 @@
+// =============================================================================
+// Grafana Alloy Configuration - Production
+// =============================================================================
+// Unified telemetry collector for all infrastructure monitoring
+//
+// Alloy built-in exporters (no external exporters needed):
+//   - Host metrics (CPU, RAM, disk, network)
+//   - Container metrics (Docker)
+//   - Redis, PostgreSQL, MongoDB, MySQL, Memcached, Kafka, Elasticsearch
+//
+// Also handles:
+//   - OTLP receiver for traces/metrics
+//   - Docker log collection
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Logging Configuration
+// -----------------------------------------------------------------------------
+logging {
+  level  = coalesce(env("ALLOY_LOG_LEVEL"), "warn")
+  format = "logfmt"
+}
+
+// =============================================================================
+// METRICS COLLECTION - Built-in Exporters
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Host Metrics (replaces node-exporter)
+// -----------------------------------------------------------------------------
+prometheus.exporter.unix "host" {
+  disable_collectors = ["arp", "bcache", "bonding", "btrfs", "infiniband", "ipvs", "nfs", "nfsd", "tapestats", "xfs", "zfs"]
+  filesystem {
+    mount_points_exclude = "^/(sys|proc|dev|host|etc|run|snap|var/lib/docker/.+)($$|/)"
+    fs_types_exclude     = "^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$$"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Container Metrics (replaces cadvisor)
+// -----------------------------------------------------------------------------
+prometheus.exporter.cadvisor "containers" {
+  docker_host = "unix:///var/run/docker.sock"
+  storage_duration = "5m"
+}
+
+// -----------------------------------------------------------------------------
+// Redis Metrics (replaces redis-exporter)
+// -----------------------------------------------------------------------------
+prometheus.exporter.redis "cache" {
+  redis_addr = coalesce(env("REDIS_CACHE_ADDR"), "redis-cache:6379")
+  redis_password = env("REDIS_PASSWORD")
+}
+
+prometheus.exporter.redis "queue" {
+  redis_addr = coalesce(env("REDIS_QUEUE_ADDR"), "redis-queue:6379")
+  redis_password = env("REDIS_PASSWORD")
+}
+
+// -----------------------------------------------------------------------------
+// PostgreSQL Metrics (replaces postgres_exporter)
+// -----------------------------------------------------------------------------
+prometheus.exporter.postgres "main" {
+  data_source_names = [coalesce(env("POSTGRES_DSN"), "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable")]
+  autodiscovery {
+    enabled = true
+  }
+}
+
+// -----------------------------------------------------------------------------
+// MongoDB Metrics (replaces mongodb_exporter)
+// Set MONGODB_URI in .env to enable
+// -----------------------------------------------------------------------------
+prometheus.exporter.mongodb "main" {
+  mongodb_uri = coalesce(env("MONGODB_URI"), "mongodb://mongo:27017")
+  direct_connect = true
+}
+
+// -----------------------------------------------------------------------------
+// MySQL Metrics (replaces mysqld_exporter)
+// Set MYSQL_DSN in .env to enable
+// -----------------------------------------------------------------------------
+prometheus.exporter.mysql "main" {
+  data_source_name = coalesce(env("MYSQL_DSN"), "root:password@tcp(mysql:3306)/")
+}
+
+// -----------------------------------------------------------------------------
+// Memcached Metrics (replaces memcached_exporter)
+// Set MEMCACHED_ADDR in .env to enable
+// -----------------------------------------------------------------------------
+prometheus.exporter.memcached "main" {
+  address = coalesce(env("MEMCACHED_ADDR"), "memcached:11211")
+  timeout = "5s"
+}
+
+// -----------------------------------------------------------------------------
+// Kafka Metrics (replaces kafka_exporter)
+// Set KAFKA_BROKERS in .env to enable
+// -----------------------------------------------------------------------------
+prometheus.exporter.kafka "main" {
+  kafka_uris = [coalesce(env("KAFKA_BROKERS"), "kafka:9092")]
+}
+
+// -----------------------------------------------------------------------------
+// Elasticsearch/OpenSearch Metrics (replaces elasticsearch_exporter)
+// Set ELASTICSEARCH_URL in .env to enable
+// -----------------------------------------------------------------------------
+prometheus.exporter.elasticsearch "main" {
+  address = coalesce(env("ELASTICSEARCH_URL"), "http://opensearch:9200")
+}
+
+// -----------------------------------------------------------------------------
+// Metrics Scraping - Collect from all built-in exporters
+// -----------------------------------------------------------------------------
+prometheus.scrape "integrations" {
+  targets = concat(
+    prometheus.exporter.unix.host.targets,
+    prometheus.exporter.cadvisor.containers.targets,
+    prometheus.exporter.redis.cache.targets,
+    prometheus.exporter.redis.queue.targets,
+    prometheus.exporter.postgres.main.targets,
+    prometheus.exporter.mongodb.main.targets,
+    prometheus.exporter.mysql.main.targets,
+    prometheus.exporter.memcached.main.targets,
+    prometheus.exporter.kafka.main.targets,
+    prometheus.exporter.elasticsearch.main.targets,
+  )
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+}
+
+// =============================================================================
+// METRICS COLLECTION - Services with Built-in Metrics
+// =============================================================================
+// These services expose /metrics endpoints directly, no exporter needed
+
+// -----------------------------------------------------------------------------
+// NATS Metrics (built-in monitoring)
+// -----------------------------------------------------------------------------
+prometheus.scrape "nats" {
+  targets = [{
+    __address__ = coalesce(env("NATS_ADDR"), "nats:8222"),
+    job = "nats",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// RabbitMQ Metrics (built-in Prometheus plugin)
+// -----------------------------------------------------------------------------
+prometheus.scrape "rabbitmq" {
+  targets = [{
+    __address__ = coalesce(env("RABBITMQ_ADDR"), "rabbitmq:15692"),
+    job = "rabbitmq",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// Traefik Metrics (built-in)
+// -----------------------------------------------------------------------------
+prometheus.scrape "traefik" {
+  targets = [{
+    __address__ = coalesce(env("TRAEFIK_ADDR"), "traefik:8080"),
+    job = "traefik",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// ClickHouse Metrics (built-in)
+// -----------------------------------------------------------------------------
+prometheus.scrape "clickhouse" {
+  targets = [{
+    __address__ = coalesce(env("CLICKHOUSE_ADDR"), "clickhouse:8123"),
+    job = "clickhouse",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// Meilisearch Metrics (built-in)
+// -----------------------------------------------------------------------------
+prometheus.scrape "meilisearch" {
+  targets = [{
+    __address__ = coalesce(env("MEILISEARCH_ADDR"), "meilisearch:7700"),
+    job = "meilisearch",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// Qdrant Metrics (built-in)
+// -----------------------------------------------------------------------------
+prometheus.scrape "qdrant" {
+  targets = [{
+    __address__ = coalesce(env("QDRANT_ADDR"), "qdrant:6333"),
+    job = "qdrant",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// MinIO Metrics (built-in)
+// -----------------------------------------------------------------------------
+prometheus.scrape "minio" {
+  targets = [{
+    __address__ = coalesce(env("MINIO_ADDR"), "minio:9000"),
+    job = "minio",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/minio/v2/metrics/cluster"
+}
+
+// =============================================================================
+// METRICS COLLECTION - Security & Identity Services
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// HashiCorp Vault Metrics
+// Requires: telemetry { prometheus_retention_time = "60s" } in vault config
+// -----------------------------------------------------------------------------
+prometheus.scrape "vault" {
+  targets = [{
+    __address__ = coalesce(env("VAULT_ADDR"), "vault:8200"),
+    job = "vault",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/v1/sys/metrics"
+  params = { "format" = ["prometheus"] }
+}
+
+// -----------------------------------------------------------------------------
+// Authentik Metrics (Identity Provider)
+// Metrics exposed on separate port 9300
+// -----------------------------------------------------------------------------
+prometheus.scrape "authentik" {
+  targets = [{
+    __address__ = coalesce(env("AUTHENTIK_ADDR"), "authentik-server:9300"),
+    job = "authentik",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// CrowdSec Metrics (Security Engine)
+// Requires: cscli metrics enable
+// -----------------------------------------------------------------------------
+prometheus.scrape "crowdsec" {
+  targets = [{
+    __address__ = coalesce(env("CROWDSEC_ADDR"), "crowdsec:6060"),
+    job = "crowdsec",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// =============================================================================
+// METRICS COLLECTION - Development Tools
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Gitea Metrics (Git Server)
+// Requires: [metrics] ENABLED = true in app.ini
+// -----------------------------------------------------------------------------
+prometheus.scrape "gitea" {
+  targets = [{
+    __address__ = coalesce(env("GITEA_ADDR"), "gitea:3000"),
+    job = "gitea",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// n8n Metrics (Workflow Automation)
+// Requires: N8N_METRICS=true environment variable
+// -----------------------------------------------------------------------------
+prometheus.scrape "n8n" {
+  targets = [{
+    __address__ = coalesce(env("N8N_ADDR"), "n8n:5678"),
+    job = "n8n",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  metrics_path = "/metrics"
+}
+
+// -----------------------------------------------------------------------------
+// Self Metrics - Alloy's own metrics
+// -----------------------------------------------------------------------------
+prometheus.scrape "alloy_self" {
+  targets = [{
+    __address__ = "localhost:12345",
+  }]
+  forward_to = [prometheus.remote_write.default.receiver]
+  scrape_interval = "60s"
+  job_name = "alloy"
+}
+
+// -----------------------------------------------------------------------------
+// Remote Write to Prometheus
+// -----------------------------------------------------------------------------
+prometheus.remote_write "default" {
+  endpoint {
+    url = coalesce(env("PROMETHEUS_URL"), "http://prometheus:9090/api/v1/write")
+
+    queue_config {
+      capacity = 10000
+      max_shards = 50
+      max_samples_per_send = 2000
+    }
+  }
+}
+
+// =============================================================================
+// LOG COLLECTION (replaces promtail)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Docker Log Discovery
+// -----------------------------------------------------------------------------
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "30s"
+}
+
+// -----------------------------------------------------------------------------
+// Relabel Docker Logs
+// -----------------------------------------------------------------------------
+discovery.relabel "docker_logs" {
+  targets = discovery.docker.containers.targets
+
+  // Keep container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Add compose project label if exists
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  // Add compose service label if exists
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  // Extract image name
+  rule {
+    source_labels = ["__meta_docker_container_image"]
+    target_label  = "image"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Docker Log Source
+// -----------------------------------------------------------------------------
+loki.source.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  targets = discovery.relabel.docker_logs.output
+  forward_to = [loki.process.docker.receiver]
+  refresh_interval = "30s"
+}
+
+// -----------------------------------------------------------------------------
+// Log Processing Pipeline
+// -----------------------------------------------------------------------------
+loki.process "docker" {
+  forward_to = [loki.write.default.receiver]
+
+  // Parse JSON logs (many apps output JSON)
+  stage.json {
+    expressions = {
+      level = "level",
+      msg   = "msg",
+      time  = "time",
+    }
+    drop_malformed = true
+  }
+
+  // Normalize log levels
+  stage.label_drop {
+    values = ["filename"]
+  }
+
+  // Add timestamp if parsed
+  stage.timestamp {
+    source = "time"
+    format = "RFC3339"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// System Logs (optional - host logs)
+// -----------------------------------------------------------------------------
+local.file_match "system_logs" {
+  path_targets = [
+    {__path__ = "/var/log/syslog", job = "syslog"},
+    {__path__ = "/var/log/auth.log", job = "auth"},
+    {__path__ = "/var/log/kern.log", job = "kernel"},
+  ]
+}
+
+loki.source.file "system" {
+  targets    = local.file_match.system_logs.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+// -----------------------------------------------------------------------------
+// Loki Write Client
+// -----------------------------------------------------------------------------
+loki.write "default" {
+  endpoint {
+    url = coalesce(env("LOKI_URL"), "http://loki:3100/loki/api/v1/push")
+
+    batch_wait = "1s"
+    batch_size = 1048576
+  }
+}
+
+// =============================================================================
+// TRACES (replaces otel-collector for trace ingestion)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// OTLP Receiver - gRPC & HTTP
+// -----------------------------------------------------------------------------
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces = [otelcol.processor.batch.default.input]
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Batch Processor - Optimize trace sending
+// -----------------------------------------------------------------------------
+otelcol.processor.batch "default" {
+  timeout = "5s"
+  send_batch_size = 1000
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Export Traces to Tempo
+// -----------------------------------------------------------------------------
+otelcol.exporter.otlp "tempo" {
+  client {
+    endpoint = coalesce(env("TEMPO_URL"), "tempo:4317")
+    tls {
+      insecure = true
+    }
+  }
+}

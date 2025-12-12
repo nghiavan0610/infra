@@ -233,24 +233,6 @@ declare -A SERVICE_CONTAINERS=(
     ["qdrant"]="qdrant"
 )
 
-# Exporter ports for monitoring
-declare -A SERVICE_EXPORTER_PORTS=(
-    ["postgres"]="9187"
-    ["postgres-ha"]="9187"
-    ["redis"]="9121"
-    ["mongo"]="9216"
-    ["nats"]="7777"
-    ["kafka"]="9308"
-    ["rabbitmq"]="15692"
-    ["traefik"]="8080"
-    ["minio"]="9000"
-    ["mysql"]="9104"
-    ["memcached"]="9150"
-    ["clickhouse"]="9363"
-    ["qdrant"]="6333"
-    ["langfuse"]="3000"
-)
-
 # Track installed services
 declare -A INSTALLED_SERVICES
 declare -A ENABLED_SERVICES
@@ -455,6 +437,7 @@ setup_env_file() {
         observability)
             local GRAFANA_PASS=$(grep "^GRAFANA_ADMIN_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2-)
             [[ -z "$GRAFANA_PASS" ]] && set_if_empty "GRAFANA_ADMIN_PASSWORD" "$(openssl rand -base64 16 | tr -d '\n')"
+            # Alloy will auto-configure services via register_monitoring_targets
             ;;
         asynq)
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
@@ -535,6 +518,11 @@ setup_env_file() {
             log_warn "GitLab Runner requires manual registration:"
             log_warn "  Run: cd services/gitlab-runner && docker compose run --rm gitlab-runner register"
             ;;
+        n8n)
+            set_if_empty "POSTGRES_NON_ROOT_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            # Enable metrics for Alloy monitoring
+            set_if_empty "N8N_METRICS" "true"
+            ;;
     esac
 
     cd "$SCRIPT_DIR"
@@ -583,13 +571,27 @@ start_service() {
                 return 0
             fi
             ;;
-        authentik|crowdsec)
+        authentik)
             if [[ -f "scripts/setup.sh" ]]; then
                 ./scripts/setup.sh 2>/dev/null || docker compose up -d
                 cd "$SCRIPT_DIR"
                 INSTALLED_SERVICES["$service_name"]="$service_dir"
                 return 0
             fi
+            ;;
+        crowdsec)
+            if [[ -f "scripts/setup.sh" ]]; then
+                ./scripts/setup.sh 2>/dev/null || docker compose up -d
+            else
+                docker compose up -d
+            fi
+            # Enable Prometheus metrics
+            sleep 5
+            docker exec crowdsec cscli metrics enable 2>/dev/null || true
+            log_info "CrowdSec Prometheus metrics enabled"
+            cd "$SCRIPT_DIR"
+            INSTALLED_SERVICES["$service_name"]="$service_dir"
+            return 0
             ;;
     esac
 
@@ -663,47 +665,136 @@ register_monitoring_targets() {
         return
     fi
 
-    log_step "Registering monitoring targets..."
+    log_step "Configuring Alloy monitoring targets..."
 
-    cd "$SCRIPT_DIR/services/observability"
-    mkdir -p targets
+    local obs_env="$SCRIPT_DIR/services/observability/.env"
 
+    # Helper to set env var in observability .env
+    set_obs_env() {
+        local key="$1" value="$2"
+        if grep -q "^${key}=" "$obs_env" 2>/dev/null; then
+            sed -i.bak "s|^${key}=.*|${key}=${value}|" "$obs_env" && rm -f "${obs_env}.bak"
+        else
+            echo "${key}=${value}" >> "$obs_env"
+        fi
+    }
+
+    # Configure Alloy based on installed services
     for service in "${!INSTALLED_SERVICES[@]}"; do
-        local port=${SERVICE_EXPORTER_PORTS[$service]}
-        if [[ -n "$port" ]]; then
-            local target_type="application"
-            case "$service" in
-                postgres|postgres-ha) target_type="postgres" ;;
-                redis) target_type="redis" ;;
-                mongo) target_type="mongodb" ;;
-                mysql) target_type="mysql" ;;
-                memcached) target_type="memcached" ;;
-                clickhouse) target_type="clickhouse" ;;
-                kafka) target_type="kafka" ;;
-                minio) target_type="minio" ;;
-                nats) target_type="nats" ;;
-                rabbitmq) target_type="rabbitmq" ;;
-                traefik) target_type="traefik" ;;
-            esac
-
-            # Create target file directly
-            local target_file="targets/${target_type}.json"
-            cat > "$target_file" << EOF
+        case "$service" in
+            postgres|postgres-ha)
+                local pg_user="${SHARED_POSTGRES_USER:-postgres}"
+                local pg_pass="${SHARED_POSTGRES_PASSWORD:-postgres}"
+                set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass}@postgres:5432/postgres?sslmode=disable"
+                log_info "  → PostgreSQL configured for Alloy"
+                ;;
+            redis)
+                set_obs_env "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD:-}"
+                set_obs_env "REDIS_CACHE_ADDR" "redis:6379"
+                set_obs_env "REDIS_QUEUE_ADDR" "redis:6379"
+                log_info "  → Redis configured for Alloy"
+                ;;
+            mongo)
+                local mongo_user="${SHARED_MONGO_USER:-mongo}"
+                local mongo_pass="${SHARED_MONGO_PASSWORD:-mongo}"
+                set_obs_env "MONGODB_URI" "mongodb://${mongo_user}:${mongo_pass}@mongo:27017"
+                log_info "  → MongoDB configured for Alloy"
+                ;;
+            mysql)
+                local mysql_pass=$(grep "^MYSQL_ROOT_PASSWORD=" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2-)
+                [[ -n "$mysql_pass" ]] && set_obs_env "MYSQL_DSN" "root:${mysql_pass}@tcp(mysql:3306)/"
+                log_info "  → MySQL configured for Alloy"
+                ;;
+            memcached)
+                set_obs_env "MEMCACHED_ADDR" "memcached:11211"
+                log_info "  → Memcached configured for Alloy"
+                ;;
+            kafka)
+                set_obs_env "KAFKA_BROKERS" "kafka:9092"
+                log_info "  → Kafka configured for Alloy"
+                ;;
+            opensearch)
+                set_obs_env "ELASTICSEARCH_URL" "http://opensearch:9200"
+                log_info "  → OpenSearch configured for Alloy"
+                ;;
+            nats)
+                set_obs_env "NATS_ADDR" "nats:8222"
+                log_info "  → NATS configured for Alloy"
+                ;;
+            rabbitmq)
+                set_obs_env "RABBITMQ_ADDR" "rabbitmq:15692"
+                log_info "  → RabbitMQ configured for Alloy"
+                ;;
+            traefik)
+                set_obs_env "TRAEFIK_ADDR" "traefik:8080"
+                log_info "  → Traefik configured for Alloy"
+                ;;
+            clickhouse)
+                set_obs_env "CLICKHOUSE_ADDR" "clickhouse:8123"
+                log_info "  → ClickHouse configured for Alloy"
+                ;;
+            meilisearch)
+                set_obs_env "MEILISEARCH_ADDR" "meilisearch:7700"
+                log_info "  → Meilisearch configured for Alloy"
+                ;;
+            qdrant)
+                set_obs_env "QDRANT_ADDR" "qdrant:6333"
+                log_info "  → Qdrant configured for Alloy"
+                ;;
+            minio)
+                set_obs_env "MINIO_ADDR" "minio:9000"
+                log_info "  → MinIO configured for Alloy"
+                ;;
+            garage)
+                # Garage needs bearer token - create target file
+                mkdir -p "$SCRIPT_DIR/services/observability/targets"
+                cat > "$SCRIPT_DIR/services/observability/targets/garage.json" << 'EOF'
 [
   {
-    "targets": ["host.docker.internal:${port}"],
-    "labels": {
-      "service": "${service}",
-      "instance": "${service}"
-    }
+    "targets": ["garage:3903"],
+    "labels": {"service": "garage", "instance": "garage"}
   }
 ]
 EOF
-            log_info "  → $service registered (${target_type}:${port})"
-        fi
+                log_info "  → Garage target file created (requires bearer token)"
+                ;;
+            langfuse)
+                # LangFuse has custom endpoint - create target file
+                mkdir -p "$SCRIPT_DIR/services/observability/targets"
+                cat > "$SCRIPT_DIR/services/observability/targets/langfuse.json" << 'EOF'
+[
+  {
+    "targets": ["langfuse:3000"],
+    "labels": {"service": "langfuse", "instance": "langfuse"}
+  }
+]
+EOF
+                log_info "  → LangFuse target file created"
+                ;;
+            # Security & Identity services
+            vault)
+                set_obs_env "VAULT_ADDR" "vault:8200"
+                log_info "  → Vault configured for Alloy (metrics auto-enabled)"
+                ;;
+            authentik)
+                set_obs_env "AUTHENTIK_ADDR" "authentik-server:9300"
+                log_info "  → Authentik configured for Alloy"
+                ;;
+            crowdsec)
+                set_obs_env "CROWDSEC_ADDR" "crowdsec:6060"
+                log_info "  → CrowdSec configured for Alloy (metrics auto-enabled)"
+                ;;
+            # Development tools
+            gitea)
+                set_obs_env "GITEA_ADDR" "gitea:3000"
+                log_info "  → Gitea configured for Alloy (metrics auto-enabled)"
+                ;;
+            n8n)
+                set_obs_env "N8N_ADDR" "n8n:5678"
+                log_info "  → n8n configured for Alloy (metrics auto-enabled)"
+                ;;
+        esac
     done
-
-    cd "$SCRIPT_DIR"
 }
 
 # Auto-enable ntfy for alerts

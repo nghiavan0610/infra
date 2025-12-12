@@ -184,11 +184,11 @@
         },
         "textMode": "auto"
       },
-      "title": "OTEL Collector",
+      "title": "Alloy",
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"otel-collector\"}",
+          "expr": "up{job=\"alloy\"}",
           "refId": "A"
         }
       ]
@@ -230,11 +230,11 @@
         },
         "textMode": "auto"
       },
-      "title": "Node Exporter",
+      "title": "Alertmanager",
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"node-exporter\"}",
+          "expr": "up{job=\"alertmanager\"}",
           "refId": "A"
         }
       ]
@@ -276,11 +276,11 @@
         },
         "textMode": "auto"
       },
-      "title": "cAdvisor",
+      "title": "Grafana",
       "type": "stat",
       "targets": [
         {
-          "expr": "up{job=\"cadvisor\"}",
+          "expr": "up{job=\"grafana\"}",
           "refId": "A"
         }
       ]

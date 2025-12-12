@@ -339,8 +339,8 @@ test_observability_config() {
     if [[ -f "$obs_dir/config/prometheus.yml" ]]; then
         log_pass "prometheus.yml exists"
 
-        # Check for key scrape jobs
-        local scrape_jobs=("prometheus" "node-exporter" "cadvisor" "docker-containers")
+        # Check for key scrape jobs (Alloy-based stack)
+        local scrape_jobs=("prometheus" "alloy" "loki" "tempo")
         for job in "${scrape_jobs[@]}"; do
             if grep -q "job_name: '$job'" "$obs_dir/config/prometheus.yml"; then
                 log_pass "Scrape job configured: $job"

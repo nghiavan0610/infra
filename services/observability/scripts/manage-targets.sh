@@ -33,16 +33,16 @@ NC='\033[0m'
 
 # Service configurations
 # Format: "file:label_key:default_port:service_label"
+# Note: Most services are monitored directly by Alloy (no file_sd_configs needed)
+# Configure via .env: REDIS_*, POSTGRES_DSN, MONGODB_URI, MYSQL_DSN, etc.
+#
+# Only these services still use file_sd_configs:
+#   - garage: requires bearer token authentication
+#   - langfuse: custom /api/public/metrics endpoint
+#   - applications: user-defined custom apps
 declare -A SERVICES=(
-    ["postgres"]="postgres.json:database:9187:postgresql"
-    ["timescaledb"]="postgres.json:database:9187:postgresql"
-    ["redis"]="redis.json:instance:6379:redis"
-    ["rabbitmq"]="rabbitmq.json:instance:15692:rabbitmq"
-    ["nats"]="nats.json:instance:8222:nats"
-    ["mongodb"]="mongodb.json:instance:9216:mongodb"
-    ["mongo"]="mongodb.json:instance:9216:mongodb"
-    ["traefik"]="traefik.json:instance:8080:traefik"
     ["garage"]="garage.json:instance:3903:garage"
+    ["langfuse"]="langfuse.json:instance:3000:langfuse"
     ["app"]="applications.json:app:9090:application"
     ["application"]="applications.json:app:9090:application"
 )

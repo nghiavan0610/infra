@@ -12,6 +12,8 @@ services:
       - GENERIC_TIMEZONE=UTC
       - TZ=UTC
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      # Metrics (for Prometheus/Alloy monitoring)
+      - N8N_METRICS=${N8N_METRICS:-true}
     ports:
       - ${N8N_PORT}:5678
     volumes:

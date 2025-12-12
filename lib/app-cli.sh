@@ -567,7 +567,7 @@ cmd_connect() {
     echo "  ✓ Alerting → automatic (based on metrics)"
     echo ""
     echo "For tracing, add these to your .env:"
-    echo "  OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317"
+    echo "  OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317"
     echo "  OTEL_SERVICE_NAME=${app_name}"
     echo ""
     echo "View in Grafana: http://localhost:3000"
@@ -700,7 +700,7 @@ cmd_init() {
 
     # Observability
     env_content+="# Observability (tracing)\n"
-    env_content+="OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317\n"
+    env_content+="OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317\n"
     env_content+="OTEL_SERVICE_NAME=${app_name}\n"
 
     # Write .env
@@ -822,7 +822,7 @@ CONNECT (for existing containers):
     ✓ Alerting - automatic
 
   For tracing, add to your .env:
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+    OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
     OTEL_SERVICE_NAME=myapi
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
