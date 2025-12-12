@@ -1,4 +1,7 @@
 <clickhouse>
+    <!-- Force IPv4 only (IPv6 disabled on host) -->
+    <listen_host>0.0.0.0</listen_host>
+
     <logger>
         <level>warning</level>
         <console>true</console>
