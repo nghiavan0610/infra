@@ -1,52 +1,19 @@
+# =============================================================================
+# Authentik - Identity Provider & SSO
+# =============================================================================
+# Uses shared PostgreSQL and Redis services
+#
+# Prerequisites:
+#   - PostgreSQL running (shared postgres)
+#   - Redis running (shared redis-cache)
+#
+# Usage:
+#   docker compose up -d
+#
+# Access: http://localhost:9000
+# =============================================================================
+
 services:
-  # ===========================================================================
-  # PostgreSQL (bundled - remove if using external)
-  # ===========================================================================
-  postgresql:
-    image: postgres:16-alpine
-    container_name: authentik-db
-    restart: unless-stopped
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_DB=authentik
-      - POSTGRES_USER=authentik
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d authentik -U authentik"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-    networks:
-      - authentik-net
-
-  # ===========================================================================
-  # Redis (bundled - remove if using external)
-  # ===========================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: authentik-redis
-    restart: unless-stopped
-    command: --save 60 1 --loglevel warning
-    volumes:
-      - ./data/redis:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 128m
-    networks:
-      - authentik-net
-
   # ===========================================================================
   # Authentik Server
   # ===========================================================================
@@ -65,15 +32,16 @@ services:
       - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
       - AUTHENTIK_BOOTSTRAP_PASSWORD=${AUTHENTIK_BOOTSTRAP_PASSWORD}
       - AUTHENTIK_BOOTSTRAP_EMAIL=${AUTHENTIK_BOOTSTRAP_EMAIL}
-      # Database
-      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgresql}
+      # Shared PostgreSQL
+      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgres}
       - AUTHENTIK_POSTGRESQL__PORT=${POSTGRES_PORT:-5432}
-      - AUTHENTIK_POSTGRESQL__NAME=${POSTGRES_DB:-authentik}
-      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-authentik}
+      - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_DB_NAME:-authentik}
+      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-postgres}
       - AUTHENTIK_POSTGRESQL__PASSWORD=${POSTGRES_PASSWORD}
-      # Redis
-      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis}
+      # Shared Redis
+      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis-cache}
       - AUTHENTIK_REDIS__PORT=${REDIS_PORT:-6379}
+      - AUTHENTIK_REDIS__PASSWORD=${REDIS_PASSWORD:-}
       # Error reporting (disable for privacy)
       - AUTHENTIK_ERROR_REPORTING__ENABLED=false
     healthcheck:
@@ -87,13 +55,8 @@ services:
         limits:
           memory: ${MEMORY_LIMIT_SERVER:-1g}
           cpus: "${CPU_LIMIT:-2}"
-    depends_on:
-      postgresql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - authentik-net
+      - infra
 
   # ===========================================================================
   # Authentik Worker (background tasks)
@@ -109,15 +72,16 @@ services:
       - ./certs:/certs
     environment:
       - AUTHENTIK_SECRET_KEY=${AUTHENTIK_SECRET_KEY}
-      # Database
-      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgresql}
+      # Shared PostgreSQL
+      - AUTHENTIK_POSTGRESQL__HOST=${POSTGRES_HOST:-postgres}
       - AUTHENTIK_POSTGRESQL__PORT=${POSTGRES_PORT:-5432}
-      - AUTHENTIK_POSTGRESQL__NAME=${POSTGRES_DB:-authentik}
-      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-authentik}
+      - AUTHENTIK_POSTGRESQL__NAME=${AUTHENTIK_DB_NAME:-authentik}
+      - AUTHENTIK_POSTGRESQL__USER=${POSTGRES_USER:-postgres}
       - AUTHENTIK_POSTGRESQL__PASSWORD=${POSTGRES_PASSWORD}
-      # Redis
-      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis}
+      # Shared Redis
+      - AUTHENTIK_REDIS__HOST=${REDIS_HOST:-redis-cache}
       - AUTHENTIK_REDIS__PORT=${REDIS_PORT:-6379}
+      - AUTHENTIK_REDIS__PASSWORD=${REDIS_PASSWORD:-}
       # Error reporting
       - AUTHENTIK_ERROR_REPORTING__ENABLED=false
     deploy:
@@ -125,15 +89,10 @@ services:
         limits:
           memory: ${MEMORY_LIMIT_WORKER:-1g}
           cpus: "${CPU_LIMIT:-2}"
-    depends_on:
-      postgresql:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     networks:
-      - authentik-net
+      - infra
 
 networks:
-  authentik-net:
-    driver: bridge
-    name: authentik-net
+  infra:
+    external: true
+    name: infra

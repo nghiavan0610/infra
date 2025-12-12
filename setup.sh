@@ -460,6 +460,20 @@ setup_env_file() {
             set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
             ;;
+        authentik)
+            set_if_empty "AUTHENTIK_SECRET_KEY" "$(openssl rand -base64 60)"
+            set_if_empty "AUTHENTIK_BOOTSTRAP_PASSWORD" "$(openssl rand -base64 16)"
+            # Use shared PostgreSQL
+            set_if_empty "POSTGRES_HOST" "postgres"
+            set_if_empty "POSTGRES_PORT" "5432"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "AUTHENTIK_DB_NAME" "authentik"
+            # Use shared Redis
+            set_if_empty "REDIS_HOST" "redis-cache"
+            set_if_empty "REDIS_PORT" "6379"
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            ;;
         mysql)
             set_if_empty "MYSQL_ROOT_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
             set_if_empty "MYSQL_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
@@ -470,12 +484,26 @@ setup_env_file() {
         gitea)
             set_if_empty "GITEA_SECRET_KEY" "$(openssl rand -hex 32)"
             set_if_empty "GITEA_INTERNAL_TOKEN" "$(openssl rand -hex 32)"
-            set_if_empty "GITEA_DB_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            # Use shared PostgreSQL
+            set_if_empty "POSTGRES_HOST" "postgres"
+            set_if_empty "POSTGRES_PORT" "5432"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "GITEA_DB_NAME" "gitea"
             ;;
         plausible)
             set_if_empty "PLAUSIBLE_SECRET_KEY" "$(openssl rand -base64 48)"
             set_if_empty "PLAUSIBLE_TOTP_KEY" "$(openssl rand -base64 32)"
-            set_if_empty "PLAUSIBLE_DB_PASSWORD" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
+            # Use shared PostgreSQL
+            set_if_empty "POSTGRES_HOST" "postgres"
+            set_if_empty "POSTGRES_PORT" "5432"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "PLAUSIBLE_DB_NAME" "plausible"
+            # Use shared ClickHouse
+            set_if_empty "CLICKHOUSE_HOST" "clickhouse"
+            set_if_empty "CLICKHOUSE_HTTP_PORT" "8123"
+            set_if_empty "PLAUSIBLE_CLICKHOUSE_DB" "plausible_events"
             ;;
         drone)
             set_if_empty "DRONE_RPC_SECRET" "$(openssl rand -hex 16)"
@@ -485,18 +513,30 @@ setup_env_file() {
             ;;
         healthchecks)
             set_if_empty "HEALTHCHECKS_SECRET_KEY" "$(openssl rand -base64 32)"
-            set_if_empty "HEALTHCHECKS_DB_PASSWORD" "$(openssl rand -hex 16)"
+            # Use shared PostgreSQL
+            set_if_empty "POSTGRES_HOST" "postgres"
+            set_if_empty "POSTGRES_PORT" "5432"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
+            set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
+            set_if_empty "HEALTHCHECKS_DB_NAME" "healthchecks"
             ;;
         langfuse)
             set_if_empty "LANGFUSE_NEXTAUTH_SECRET" "$(openssl rand -base64 32)"
             set_if_empty "LANGFUSE_SALT" "$(openssl rand -base64 32)"
-            set_if_empty "LANGFUSE_DB_PASS" "$(openssl rand -base64 24 | tr -d '\n' | head -c 24)"
-            set_if_empty "LANGFUSE_REDIS_AUTH" "${SHARED_REDIS_PASSWORD}"
+            # Use shared PostgreSQL
+            set_if_empty "POSTGRES_HOST" "postgres"
+            set_if_empty "POSTGRES_PORT" "5432"
+            set_if_empty "POSTGRES_USER" "${SHARED_POSTGRES_USER}"
             set_if_empty "POSTGRES_PASSWORD" "${SHARED_POSTGRES_PASSWORD}"
-            # Use shared ClickHouse password if clickhouse service is enabled
+            set_if_empty "LANGFUSE_DB_NAME" "langfuse"
+            # Use shared Redis
+            set_if_empty "REDIS_HOST" "redis-cache"
+            set_if_empty "REDIS_PORT" "6379"
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            # Use shared ClickHouse (optional)
             if [[ -f "$SCRIPT_DIR/services/clickhouse/.env" ]]; then
                 local CH_PASS=$(grep "^CLICKHOUSE_PASSWORD=" "$SCRIPT_DIR/services/clickhouse/.env" 2>/dev/null | cut -d'=' -f2-)
-                [[ -n "$CH_PASS" ]] && set_if_empty "LANGFUSE_CLICKHOUSE_PASSWORD" "$CH_PASS"
+                [[ -n "$CH_PASS" ]] && set_if_empty "CLICKHOUSE_PASSWORD" "$CH_PASS"
             fi
             ;;
         opensearch)
@@ -580,11 +620,11 @@ start_service() {
             fi
             ;;
         authentik)
-            if [[ -f "scripts/setup.sh" ]]; then
-                ./scripts/setup.sh 2>/dev/null || docker compose up -d
-                cd "$SCRIPT_DIR"
-                INSTALLED_SERVICES["$service_name"]="$service_dir"
-                return 0
+            # Create database in shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'authentik'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE authentik;" 2>/dev/null || true
+                log_info "Authentik database ready"
             fi
             ;;
         glitchtip)
@@ -593,6 +633,43 @@ start_service() {
                 docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'glitchtip'" 2>/dev/null | grep -q 1 || \
                     docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE glitchtip;" 2>/dev/null || true
                 log_info "GlitchTip database ready"
+            fi
+            ;;
+        plausible)
+            # Create database in shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'plausible'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE plausible;" 2>/dev/null || true
+                log_info "Plausible PostgreSQL database ready"
+            fi
+            # Create database in shared clickhouse
+            if docker ps --format '{{.Names}}' | grep -q "^clickhouse$"; then
+                docker exec clickhouse clickhouse-client --query "CREATE DATABASE IF NOT EXISTS plausible_events" 2>/dev/null || true
+                log_info "Plausible ClickHouse database ready"
+            fi
+            ;;
+        gitea)
+            # Create database in shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'gitea'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE gitea;" 2>/dev/null || true
+                log_info "Gitea database ready"
+            fi
+            ;;
+        healthchecks)
+            # Create database in shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'healthchecks'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE healthchecks;" 2>/dev/null || true
+                log_info "Healthchecks database ready"
+            fi
+            ;;
+        langfuse)
+            # Create database in shared postgres
+            if docker ps --format '{{.Names}}' | grep -q "^postgres$"; then
+                docker exec postgres psql -U postgres -d postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'langfuse'" 2>/dev/null | grep -q 1 || \
+                    docker exec postgres psql -U postgres -d postgres -c "CREATE DATABASE langfuse;" 2>/dev/null || true
+                log_info "Langfuse database ready"
             fi
             ;;
         crowdsec)

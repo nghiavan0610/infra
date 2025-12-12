@@ -1,5 +1,8 @@
 <?xml version="1.0"?>
 <clickhouse>
+    <!-- Force IPv4 only (IPv6 disabled on some hosts) -->
+    <listen_host>0.0.0.0</listen_host>
+
     <!-- Logging -->
     <logger>
         <level>information</level>

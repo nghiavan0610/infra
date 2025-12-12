@@ -1,3 +1,17 @@
+# =============================================================================
+# Healthchecks - Cron Job Monitoring
+# =============================================================================
+# Uses shared PostgreSQL service
+#
+# Prerequisites:
+#   - PostgreSQL running (shared postgres)
+#
+# Usage:
+#   docker compose up -d
+#
+# Access: http://localhost:8002
+# =============================================================================
+
 services:
   healthchecks:
     image: healthchecks/healthchecks:latest
@@ -5,20 +19,20 @@ services:
     restart: unless-stopped
     environment:
       # Site settings
-      - SITE_ROOT=${HEALTHCHECKS_SITE_ROOT:-http://localhost:8000}
+      - SITE_ROOT=${HEALTHCHECKS_SITE_ROOT:-http://localhost:8002}
       - SITE_NAME=${HEALTHCHECKS_SITE_NAME:-Healthchecks}
       - DEFAULT_FROM_EMAIL=${HEALTHCHECKS_FROM_EMAIL:-healthchecks@localhost}
       - SECRET_KEY=${HEALTHCHECKS_SECRET_KEY}
-      # Database
+      # Shared PostgreSQL
       - DB=postgres
-      - DB_HOST=healthchecks-db
-      - DB_PORT=5432
+      - DB_HOST=${POSTGRES_HOST:-postgres}
+      - DB_PORT=${POSTGRES_PORT:-5432}
       - DB_NAME=${HEALTHCHECKS_DB_NAME:-healthchecks}
-      - DB_USER=${HEALTHCHECKS_DB_USER:-healthchecks}
-      - DB_PASSWORD=${HEALTHCHECKS_DB_PASSWORD}
+      - DB_USER=${POSTGRES_USER:-postgres}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
       # Features
       - REGISTRATION_OPEN=${HEALTHCHECKS_REGISTRATION_OPEN:-false}
-      - PING_ENDPOINT=${HEALTHCHECKS_PING_ENDPOINT:-http://localhost:8000/ping/}
+      - PING_ENDPOINT=${HEALTHCHECKS_PING_ENDPOINT:-http://localhost:8002/ping/}
       # Email (optional)
       - EMAIL_HOST=${HEALTHCHECKS_EMAIL_HOST:-}
       - EMAIL_PORT=${HEALTHCHECKS_EMAIL_PORT:-587}
@@ -31,12 +45,9 @@ services:
       - DISCORD_CLIENT_ID=${HEALTHCHECKS_DISCORD_CLIENT_ID:-}
       - DISCORD_CLIENT_SECRET=${HEALTHCHECKS_DISCORD_CLIENT_SECRET:-}
     ports:
-      - "${HEALTHCHECKS_PORT:-8000}:8000"
+      - "${HEALTHCHECKS_PORT:-8002}:8000"
     volumes:
       - healthchecks_data:/data
-    depends_on:
-      healthchecks-db:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/status/"]
       interval: 30s
@@ -49,27 +60,8 @@ services:
     labels:
       - "traefik.enable=false"
 
-  healthchecks-db:
-    image: postgres:16-alpine
-    container_name: healthchecks-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${HEALTHCHECKS_DB_USER:-healthchecks}
-      POSTGRES_PASSWORD: ${HEALTHCHECKS_DB_PASSWORD}
-      POSTGRES_DB: ${HEALTHCHECKS_DB_NAME:-healthchecks}
-    volumes:
-      - healthchecks_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "${HEALTHCHECKS_DB_USER:-healthchecks}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - infra
-
 volumes:
   healthchecks_data:
-  healthchecks_db_data:
 
 networks:
   infra:
