@@ -340,6 +340,43 @@ load_shared_secrets() {
     return 1
 }
 
+# Sync SHARED_* variables with actual service .env files (in case they differ)
+sync_shared_secrets() {
+    # Read actual postgres password from postgres/.env if it exists
+    local pg_env="$SCRIPT_DIR/services/postgres/.env"
+    if [[ -f "$pg_env" ]]; then
+        local actual_pg_pass=$(grep "^POSTGRES_PASSWORD=" "$pg_env" 2>/dev/null | cut -d= -f2)
+        if [[ -n "$actual_pg_pass" && "$actual_pg_pass" != "$SHARED_POSTGRES_PASSWORD" ]]; then
+            SHARED_POSTGRES_PASSWORD="$actual_pg_pass"
+            log_info "Synced PostgreSQL password from postgres/.env"
+        fi
+        local actual_pg_user=$(grep "^POSTGRES_USER=" "$pg_env" 2>/dev/null | cut -d= -f2)
+        if [[ -n "$actual_pg_user" ]]; then
+            SHARED_POSTGRES_USER="$actual_pg_user"
+        fi
+    fi
+
+    # Read actual redis password from redis/.env if it exists
+    local redis_env="$SCRIPT_DIR/services/redis/.env"
+    if [[ -f "$redis_env" ]]; then
+        local actual_redis_pass=$(grep "^REDIS_CACHE_PASSWORD=" "$redis_env" 2>/dev/null | cut -d= -f2)
+        if [[ -n "$actual_redis_pass" && "$actual_redis_pass" != "$SHARED_REDIS_PASSWORD" ]]; then
+            SHARED_REDIS_PASSWORD="$actual_redis_pass"
+            log_info "Synced Redis password from redis/.env"
+        fi
+    fi
+
+    # Read actual mongo password from mongo/.env if it exists
+    local mongo_env="$SCRIPT_DIR/services/mongo/.env"
+    if [[ -f "$mongo_env" ]]; then
+        local actual_mongo_pass=$(grep "^MONGO_INITDB_ROOT_PASSWORD=" "$mongo_env" 2>/dev/null | cut -d= -f2)
+        if [[ -n "$actual_mongo_pass" && "$actual_mongo_pass" != "$SHARED_MONGO_PASSWORD" ]]; then
+            SHARED_MONGO_PASSWORD="$actual_mongo_pass"
+            log_info "Synced MongoDB password from mongo/.env"
+        fi
+    fi
+}
+
 # =============================================================================
 # Helper Functions
 # =============================================================================
@@ -785,13 +822,28 @@ register_monitoring_targets() {
     for service in "${!INSTALLED_SERVICES[@]}"; do
         case "$service" in
             postgres|postgres-ha)
-                local pg_user="${SHARED_POSTGRES_USER:-postgres}"
-                local pg_pass="${SHARED_POSTGRES_PASSWORD:-postgres}"
+                # Read directly from postgres .env to ensure correct password
+                local pg_env="$SCRIPT_DIR/services/postgres/.env"
+                local pg_user="postgres"
+                local pg_pass=""
+                if [[ -f "$pg_env" ]]; then
+                    pg_user=$(grep "^POSTGRES_USER=" "$pg_env" 2>/dev/null | cut -d= -f2 || echo "postgres")
+                    pg_pass=$(grep "^POSTGRES_PASSWORD=" "$pg_env" 2>/dev/null | cut -d= -f2)
+                fi
+                pg_user="${pg_user:-postgres}"
+                pg_pass="${pg_pass:-${SHARED_POSTGRES_PASSWORD:-postgres}}"
                 set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass}@postgres:5432/postgres?sslmode=disable"
                 log_info "  → PostgreSQL configured for Alloy"
                 ;;
             redis)
-                set_obs_env "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD:-}"
+                # Read directly from redis .env to ensure correct password
+                local redis_env="$SCRIPT_DIR/services/redis/.env"
+                local redis_pass=""
+                if [[ -f "$redis_env" ]]; then
+                    redis_pass=$(grep "^REDIS_CACHE_PASSWORD=" "$redis_env" 2>/dev/null | cut -d= -f2)
+                fi
+                redis_pass="${redis_pass:-${SHARED_REDIS_PASSWORD:-}}"
+                set_obs_env "REDIS_PASSWORD" "$redis_pass"
                 set_obs_env "REDIS_CACHE_ADDR" "redis-cache:6379"
                 set_obs_env "REDIS_QUEUE_ADDR" "redis-queue:6379"
                 log_info "  → Redis (cache + queue) configured for Alloy"
@@ -1055,6 +1107,9 @@ run_setup() {
     if ! load_shared_secrets; then
         generate_shared_secrets
     fi
+
+    # Sync with actual service .env files (in case they have different passwords)
+    sync_shared_secrets
 
     # Setup networks first
     setup_networks
