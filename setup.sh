@@ -960,6 +960,13 @@ EOF
                 ;;
         esac
     done
+
+    # Restart Alloy to pick up new credentials
+    if is_container_running "alloy"; then
+        log_step "Restarting Alloy to apply new configuration..."
+        docker restart alloy >/dev/null 2>&1
+        log_info "  → Alloy restarted"
+    fi
 }
 
 # Auto-enable ntfy for alerts
