@@ -23,7 +23,7 @@ services:
   # ===========================================================================
   # Replaces: node-exporter, cadvisor, redis-exporter, otel-collector, promtail
   alloy:
-    image: grafana/alloy:v1.4.2
+    image: grafana/alloy:v1.11.0
     container_name: alloy
     restart: unless-stopped
     command:

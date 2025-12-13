@@ -792,9 +792,9 @@ register_monitoring_targets() {
                 ;;
             redis)
                 set_obs_env "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD:-}"
-                set_obs_env "REDIS_CACHE_ADDR" "redis:6379"
-                set_obs_env "REDIS_QUEUE_ADDR" "redis:6379"
-                log_info "  → Redis configured for Alloy"
+                set_obs_env "REDIS_CACHE_ADDR" "redis-cache:6379"
+                set_obs_env "REDIS_QUEUE_ADDR" "redis-queue:6379"
+                log_info "  → Redis (cache + queue) configured for Alloy"
                 ;;
             # NOTE: MongoDB, MySQL, Memcached, Kafka, OpenSearch require external exporters
             # These are scraped via prometheus.scrape if you deploy their exporters separately
