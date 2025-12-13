@@ -315,10 +315,8 @@ else
         echo -e "  Volumes:    $(docker volume ls -q | wc -l | tr -d ' ')"
 
         # Disk usage
-        local disk_used=$(df -h / | tail -1 | awk '{print $3}')
-        local disk_avail=$(df -h / | tail -1 | awk '{print $4}')
-        local disk_pct=$(df -h / | tail -1 | awk '{print $5}')
-        echo -e "  Disk:       $disk_used used / $disk_avail available ($disk_pct)"
+        disk_info=$(df -h / | tail -1 | awk '{print $3 "|" $4 "|" $5}')
+        echo -e "  Disk:       $(echo "$disk_info" | cut -d'|' -f1) used / $(echo "$disk_info" | cut -d'|' -f2) available ($(echo "$disk_info" | cut -d'|' -f3))"
     fi
 
     # Databases
