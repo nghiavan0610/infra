@@ -505,8 +505,9 @@ mysql_connection_string() {
     local host=$3
     local port=$4
     local database=$5
-
-    echo "mysql://${user}:${pass}@${host}:${port}/${database}"
+    # URL-encode password to handle special characters
+    local pass_encoded=$(url_encode "$pass")
+    echo "mysql://${user}:${pass_encoded}@${host}:${port}/${database}"
 }
 
 mongo_connection_string() {
@@ -515,8 +516,9 @@ mongo_connection_string() {
     local host=$3
     local port=$4
     local database=$5
-
-    echo "mongodb://${user}:${pass}@${host}:${port}/${database}?authSource=admin"
+    # URL-encode password to handle special characters
+    local pass_encoded=$(url_encode "$pass")
+    echo "mongodb://${user}:${pass_encoded}@${host}:${port}/${database}?authSource=admin"
 }
 
 redis_connection_string() {
@@ -524,6 +526,19 @@ redis_connection_string() {
     local host=$2
     local port=$3
     local db=${4:-0}
+    # URL-encode password to handle special characters
+    local pass_encoded=$(url_encode "$pass")
+    echo "redis://:${pass_encoded}@${host}:${port}/${db}"
+}
 
-    echo "redis://:${pass}@${host}:${port}/${db}"
+postgres_connection_string() {
+    local user=$1
+    local pass=$2
+    local host=$3
+    local port=$4
+    local database=$5
+    local sslmode=${6:-disable}
+    # URL-encode password to handle special characters
+    local pass_encoded=$(url_encode "$pass")
+    echo "postgresql://${user}:${pass_encoded}@${host}:${port}/${database}?sslmode=${sslmode}"
 }

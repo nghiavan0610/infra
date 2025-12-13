@@ -37,9 +37,9 @@ services:
           cpus: "${WHISPER_CPU_RESERVATION:-0.5}"
           memory: ${WHISPER_MEMORY_RESERVATION:-512M}
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
       start_period: 120s
     security_opt:
@@ -93,9 +93,9 @@ services:
               count: 1
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8000/health || exit 1"]
+      test: ["CMD-SHELL", "uv run python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)\" || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
       start_period: 180s
     security_opt:

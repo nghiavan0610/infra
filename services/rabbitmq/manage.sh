@@ -176,13 +176,14 @@ add_vhost() {
         '{"routing_key": "dlx"}' > /dev/null
 
     # Save credentials
+    local password_encoded=$(urlencode "$admin_password")
     cat > "$cred_file" << EOF
 # RabbitMQ Vhost: $vhost_lower
 # Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 RABBITMQ_VHOST=$vhost_lower
 RABBITMQ_USER=$admin_user
 RABBITMQ_PASSWORD=$admin_password
-RABBITMQ_URL=amqp://${admin_user}:${admin_password}@localhost:5672/${vhost_lower}
+RABBITMQ_URL=amqp://${admin_user}:${password_encoded}@localhost:5672/${vhost_lower}
 RABBITMQ_MANAGEMENT_URL=http://localhost:15672/#/vhosts/${vhost_lower}
 EOF
     chmod 600 "$cred_file"
@@ -280,13 +281,14 @@ add_user() {
         "{\"configure\": \"$configure_pattern\", \"write\": \"$write_pattern\", \"read\": \"$read_pattern\"}" > /dev/null
 
     # Save credentials
+    local password_encoded=$(urlencode "$password")
     cat > "$cred_file" << EOF
 # RabbitMQ User: $user_lower @ $vhost_lower
 # Created: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 RABBITMQ_VHOST=$vhost_lower
 RABBITMQ_USER=$user_lower
 RABBITMQ_PASSWORD=$password
-RABBITMQ_URL=amqp://${user_lower}:${password}@localhost:5672/${vhost_lower}
+RABBITMQ_URL=amqp://${user_lower}:${password_encoded}@localhost:5672/${vhost_lower}
 RABBITMQ_CONFIGURE=$configure_pattern
 RABBITMQ_WRITE=$write_pattern
 RABBITMQ_READ=$read_pattern

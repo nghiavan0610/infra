@@ -65,6 +65,36 @@ log_section() {
 }
 
 # =============================================================================
+# String Encoding
+# =============================================================================
+
+# URL-encode a string for use in connection strings (DSN/URLs)
+# Encodes special characters that have meaning in URLs
+url_encode() {
+    local string="$1"
+    local encoded=""
+    local i char
+    for (( i=0; i<${#string}; i++ )); do
+        char="${string:$i:1}"
+        case "$char" in
+            [a-zA-Z0-9._~-]) encoded+="$char" ;;
+            ' ') encoded+="%20" ;;
+            '+') encoded+="%2B" ;;
+            '@') encoded+="%40" ;;
+            ':') encoded+="%3A" ;;
+            '/') encoded+="%2F" ;;
+            '?') encoded+="%3F" ;;
+            '#') encoded+="%23" ;;
+            '%') encoded+="%25" ;;
+            '&') encoded+="%26" ;;
+            '=') encoded+="%3D" ;;
+            *) encoded+="$char" ;;
+        esac
+    done
+    echo "$encoded"
+}
+
+# =============================================================================
 # Environment Detection
 # =============================================================================
 

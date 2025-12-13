@@ -132,6 +132,32 @@ log_header() {
     echo ""
 }
 
+# URL-encode password for use in connection strings (DSN)
+# Encodes special characters that have meaning in URLs
+url_encode_password() {
+    local string="$1"
+    local encoded=""
+    local i char
+    for (( i=0; i<${#string}; i++ )); do
+        char="${string:$i:1}"
+        case "$char" in
+            [a-zA-Z0-9._~-]) encoded+="$char" ;;
+            ' ') encoded+="%20" ;;
+            '+') encoded+="%2B" ;;
+            '@') encoded+="%40" ;;
+            ':') encoded+="%3A" ;;
+            '/') encoded+="%2F" ;;
+            '?') encoded+="%3F" ;;
+            '#') encoded+="%23" ;;
+            '%') encoded+="%25" ;;
+            '&') encoded+="%26" ;;
+            '=') encoded+="%3D" ;;
+            *) encoded+="$char" ;;
+        esac
+    done
+    echo "$encoded"
+}
+
 # =============================================================================
 # Service Registry - Maps service names to directories
 # =============================================================================
@@ -307,9 +333,10 @@ EOF
 generate_shared_secrets() {
     log_step "Generating shared secrets..."
 
-    SHARED_POSTGRES_PASSWORD=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-    SHARED_REDIS_PASSWORD=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
-    SHARED_MONGO_PASSWORD=$(openssl rand -base64 24 | tr -d '\n' | head -c 24)
+    # Use tr -d to remove URL-problematic characters (+, /, =) from base64 output
+    SHARED_POSTGRES_PASSWORD=$(openssl rand -base64 32 | tr -d '+/=\n' | head -c 24)
+    SHARED_REDIS_PASSWORD=$(openssl rand -base64 32 | tr -d '+/=\n' | head -c 24)
+    SHARED_MONGO_PASSWORD=$(openssl rand -base64 32 | tr -d '+/=\n' | head -c 24)
     SHARED_GARAGE_ADMIN_TOKEN=$(openssl rand -hex 32)
 
     cat > "$SCRIPT_DIR/.secrets" << EOF
@@ -832,7 +859,9 @@ register_monitoring_targets() {
                 fi
                 pg_user="${pg_user:-postgres}"
                 pg_pass="${pg_pass:-${SHARED_POSTGRES_PASSWORD:-postgres}}"
-                set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass}@postgres:5432/postgres?sslmode=disable"
+                # URL-encode password for DSN (handles +, @, and other special chars)
+                local pg_pass_encoded=$(url_encode_password "$pg_pass")
+                set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass_encoded}@postgres:5432/postgres?sslmode=disable"
                 log_info "  → PostgreSQL configured for Alloy"
                 ;;
             redis)

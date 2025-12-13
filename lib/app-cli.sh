@@ -149,7 +149,8 @@ cmd_register() {
                 ;;
             mysql)
                 "$SCRIPT_DIR/db-cli.sh" mysql create-user "$db_user" "$db_pass" "$db_name" 2>/dev/null || true
-                app_config+="DATABASE_URL=mysql://${db_user}:${db_pass}@mysql:3306/${db_name}\n"
+                local db_pass_encoded=$(url_encode "$db_pass")
+                app_config+="DATABASE_URL=mysql://${db_user}:${db_pass_encoded}@mysql:3306/${db_name}\n"
                 app_config+="DB_HOST=mysql\n"
                 app_config+="DB_PORT=3306\n"
                 app_config+="DB_NAME=$db_name\n"
@@ -159,7 +160,8 @@ cmd_register() {
                 ;;
             mongo|mongodb)
                 "$SCRIPT_DIR/db-cli.sh" mongo create-user "$db_user" "$db_pass" "$db_name" 2>/dev/null || true
-                app_config+="MONGO_URL=mongodb://${db_user}:${db_pass}@mongo:27017/${db_name}?authSource=${db_name}\n"
+                local db_pass_encoded=$(url_encode "$db_pass")
+                app_config+="MONGO_URL=mongodb://${db_user}:${db_pass_encoded}@mongo:27017/${db_name}?authSource=${db_name}\n"
                 app_config+="DB_HOST=mongo\n"
                 app_config+="DB_PORT=27017\n"
                 app_config+="DB_NAME=$db_name\n"
@@ -177,8 +179,9 @@ cmd_register() {
         if [[ -z "$redis_pass" ]] && [[ -f "$INFRA_ROOT/services/redis/.env" ]]; then
             redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2)
         fi
-        app_config+="REDIS_URL=redis://:${redis_pass}@redis-cache:6379/0\n"
-        app_config+="REDIS_QUEUE_URL=redis://:${redis_pass}@redis-queue:6379/0\n"
+        local redis_pass_encoded=$(url_encode "$redis_pass")
+        app_config+="REDIS_URL=redis://:${redis_pass_encoded}@redis-cache:6379/0\n"
+        app_config+="REDIS_QUEUE_URL=redis://:${redis_pass_encoded}@redis-queue:6379/0\n"
         app_config+="REDIS_HOST=redis-cache\n"
         app_config+="REDIS_PORT=6379\n"
         app_config+="REDIS_PASSWORD=$redis_pass\n"
@@ -647,8 +650,9 @@ cmd_init() {
                 ;;
             mysql)
                 "$SCRIPT_DIR/db-cli.sh" mysql create-user "$db_user" "$db_pass" "$db_name" >/dev/null 2>&1 || true
+                local db_pass_encoded=$(url_encode "$db_pass")
                 env_content+="# Database\n"
-                env_content+="DATABASE_URL=mysql://${db_user}:${db_pass}@mysql:3306/${db_name}\n"
+                env_content+="DATABASE_URL=mysql://${db_user}:${db_pass_encoded}@mysql:3306/${db_name}\n"
                 env_content+="DB_HOST=mysql\n"
                 env_content+="DB_PORT=3306\n"
                 env_content+="DB_NAME=${db_name}\n"
@@ -658,8 +662,9 @@ cmd_init() {
                 ;;
             mongo|mongodb)
                 "$SCRIPT_DIR/db-cli.sh" mongo create-user "$db_user" "$db_pass" "$db_name" >/dev/null 2>&1 || true
+                local db_pass_encoded=$(url_encode "$db_pass")
                 env_content+="# Database\n"
-                env_content+="MONGO_URL=mongodb://${db_user}:${db_pass}@mongo:27017/${db_name}?authSource=${db_name}\n"
+                env_content+="MONGO_URL=mongodb://${db_user}:${db_pass_encoded}@mongo:27017/${db_name}?authSource=${db_name}\n"
                 env_content+="DB_HOST=mongo\n"
                 env_content+="DB_PORT=27017\n"
                 env_content+="DB_NAME=${db_name}\n"
@@ -677,9 +682,10 @@ cmd_init() {
         if [[ -z "$redis_pass" ]] && [[ -f "$INFRA_ROOT/services/redis/.env" ]]; then
             redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2)
         fi
+        local redis_pass_encoded=$(url_encode "$redis_pass")
         env_content+="# Redis\n"
-        env_content+="REDIS_URL=redis://:${redis_pass}@redis-cache:6379/0\n"
-        env_content+="REDIS_QUEUE_URL=redis://:${redis_pass}@redis-queue:6379/0\n\n"
+        env_content+="REDIS_URL=redis://:${redis_pass_encoded}@redis-cache:6379/0\n"
+        env_content+="REDIS_QUEUE_URL=redis://:${redis_pass_encoded}@redis-queue:6379/0\n\n"
         log_info "Redis configured"
     fi
 
