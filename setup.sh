@@ -510,9 +510,11 @@ setup_env_file() {
             set_if_empty "GARAGE_ADMIN_TOKEN" "${SHARED_GARAGE_ADMIN_TOKEN}"
             ;;
         observability)
-            local GRAFANA_PASS=$(grep "^GRAFANA_ADMIN_PASSWORD=" .env 2>/dev/null | cut -d'=' -f2-)
-            [[ -z "$GRAFANA_PASS" ]] && set_if_empty "GRAFANA_ADMIN_PASSWORD" "$(openssl rand -base64 16 | tr -d '\n')"
-            # Alloy will auto-configure services via register_monitoring_targets
+            # Generate Grafana password if empty or placeholder
+            set_if_empty "GRAFANA_ADMIN_PASSWORD" "$(openssl rand -base64 16 | tr -d '\n')"
+            # Sync Redis/Postgres credentials for Alloy exporters
+            set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"
+            set_if_empty "POSTGRES_DSN" "postgresql://${SHARED_POSTGRES_USER}:${SHARED_POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
             ;;
         asynq)
             set_if_empty "REDIS_PASSWORD" "${SHARED_REDIS_PASSWORD}"

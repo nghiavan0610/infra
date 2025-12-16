@@ -120,7 +120,7 @@ prometheus.scrape "rabbitmq" {
 // -----------------------------------------------------------------------------
 prometheus.scrape "traefik" {
   targets = [{
-    __address__ = coalesce(sys.env("TRAEFIK_ADDR"), "traefik:8080"),
+    __address__ = coalesce(sys.env("TRAEFIK_ADDR"), "traefik:8082"),
     job = "traefik",
   }]
   forward_to = [prometheus.remote_write.default.receiver]

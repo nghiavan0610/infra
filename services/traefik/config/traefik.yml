@@ -150,7 +150,7 @@ accessLog:
 # -----------------------------------------------------------------------------
 metrics:
   prometheus:
-    entryPoint: websecure
+    entryPoint: traefik
     addEntryPointsLabels: true
     addRoutersLabels: true
     addServicesLabels: true
