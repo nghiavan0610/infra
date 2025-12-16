@@ -369,20 +369,21 @@ loki.process "docker" {
 }
 
 // -----------------------------------------------------------------------------
-// System Logs (optional - host logs)
+// System Logs (disabled - requires /var/log mount)
 // -----------------------------------------------------------------------------
-local.file_match "system_logs" {
-  path_targets = [
-    {__path__ = "/var/log/syslog", job = "syslog"},
-    {__path__ = "/var/log/auth.log", job = "auth"},
-    {__path__ = "/var/log/kern.log", job = "kernel"},
-  ]
-}
-
-loki.source.file "system" {
-  targets    = local.file_match.system_logs.targets
-  forward_to = [loki.write.default.receiver]
-}
+// Uncomment below and add /var/log:/var/log:ro volume to enable host log collection
+// local.file_match "system_logs" {
+//   path_targets = [
+//     {__path__ = "/var/log/syslog", job = "syslog"},
+//     {__path__ = "/var/log/auth.log", job = "auth"},
+//     {__path__ = "/var/log/kern.log", job = "kernel"},
+//   ]
+// }
+//
+// loki.source.file "system" {
+//   targets    = local.file_match.system_logs.targets
+//   forward_to = [loki.write.default.receiver]
+// }
 
 // -----------------------------------------------------------------------------
 // Loki Write Client
