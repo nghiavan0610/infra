@@ -68,10 +68,10 @@ Or connect to the same network:
 services:
   your-app:
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 

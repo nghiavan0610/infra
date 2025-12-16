@@ -56,7 +56,6 @@ services:
       start_period: 30s
     networks:
       - infra
-      - traefik-public
     labels:
       - "traefik.enable=false"
 
@@ -65,6 +64,4 @@ volumes:
 
 networks:
   infra:
-    external: true
-  traefik-public:
     external: true

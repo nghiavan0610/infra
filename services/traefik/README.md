@@ -18,7 +18,7 @@ Production-ready Traefik reverse proxy with automatic SSL, security headers, and
 ### 1. Create the network
 
 ```bash
-docker network create traefik-public
+docker network create infra
 ```
 
 ### 2. Configure environment
@@ -87,10 +87,10 @@ services:
       - "traefik.http.routers.myapp.entrypoints=websecure"
       - "traefik.http.routers.myapp.tls.certresolver=letsencrypt"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 
@@ -108,10 +108,10 @@ services:
       # Apply middleware chain
       - "traefik.http.routers.myapp.middlewares=chain-web@file"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 
@@ -129,10 +129,10 @@ services:
       # Specify which port the container uses
       - "traefik.http.services.myapp.loadbalancer.server.port=8080"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 
@@ -149,10 +149,10 @@ services:
       - "traefik.http.routers.api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.api.middlewares=chain-api@file"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 
@@ -171,10 +171,10 @@ services:
       - "traefik.http.routers.myapp.tls.domains[0].main=example.com"
       - "traefik.http.routers.myapp.tls.domains[0].sans=*.example.com"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 
@@ -209,11 +209,11 @@ services:
       - "traefik.http.routers.grafana.middlewares=chain-web@file"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
     networks:
-      - traefik-public
+      - infra
       - observability
 
 networks:
-  traefik-public:
+  infra:
     external: true
   observability:
     # keep existing network
@@ -233,10 +233,10 @@ services:
       - "traefik.http.routers.n8n.middlewares=chain-web@file"
       - "traefik.http.services.n8n.loadbalancer.server.port=5678"
     networks:
-      - traefik-public
+      - infra
 
 networks:
-  traefik-public:
+  infra:
     external: true
 ```
 

@@ -5,7 +5,7 @@
 # Supports: PostgreSQL, MySQL, SQLite, MongoDB, etc.
 #
 # Usage:
-#   docker network create traefik-public  # If not using setup.sh
+#   docker network create infra  # If not using setup.sh
 #   docker compose up -d
 #
 # Access: http://localhost:8081
@@ -58,12 +58,12 @@ services:
     #   - "traefik.http.middlewares.adminer-auth.basicauth.users=${ADMINER_BASIC_AUTH}"
     #   - "traefik.http.services.adminer.loadbalancer.server.port=8080"
     networks:
-      - traefik-public
+      - infra
 
 # =============================================================================
 # Networks
 # =============================================================================
 networks:
-  traefik-public:
+  infra:
     external: true
-    name: traefik-public
+    name: infra

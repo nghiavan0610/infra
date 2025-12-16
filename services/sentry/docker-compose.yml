@@ -8,7 +8,7 @@
 #   - Redis running (uses shared redis)
 #
 # Usage:
-#   docker network create traefik-public  # If not using setup.sh
+#   docker network create infra  # If not using setup.sh
 #   docker compose up -d
 #   docker compose exec sentry sentry upgrade  # First time only
 #
@@ -71,7 +71,7 @@ services:
     #   - "traefik.http.routers.sentry.tls.certresolver=letsencrypt"
     #   - "traefik.http.services.sentry.loadbalancer.server.port=9000"
     networks:
-      - traefik-public
+      - infra
     depends_on:
       - sentry-cron
       - sentry-worker
@@ -106,7 +106,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - traefik-public
+      - infra
 
   sentry-worker:
     image: getsentry/sentry:24.1.0
@@ -138,7 +138,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - traefik-public
+      - infra
 
 # =============================================================================
 # Volumes
@@ -152,6 +152,6 @@ volumes:
 # Networks
 # =============================================================================
 networks:
-  traefik-public:
+  infra:
     external: true
-    name: traefik-public
+    name: infra

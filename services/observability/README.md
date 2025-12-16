@@ -52,7 +52,7 @@ nano .env
 
 ```bash
 # If NOT using setup.sh from the root directory:
-docker network create traefik-public
+docker network create infra
 ```
 
 ### 3. Start the Stack

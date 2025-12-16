@@ -793,30 +793,8 @@ start_service() {
 setup_networks() {
     log_header "Setting Up Networks"
 
-    docker network create traefik-public 2>/dev/null && log_info "Created traefik-public" || true
-    docker network create infra 2>/dev/null && log_info "Created infra" || true
-}
-
-connect_traefik_services() {
-    if [[ -z "${INSTALLED_SERVICES[traefik]}" ]]; then
-        return
-    fi
-
-    log_step "Connecting services to Traefik network..."
-
-    local web_services=(
-        "grafana" "uptime-kuma" "authentik-server" "n8n" "asynqmon"
-        "meilisearch" "registry" "portainer" "redisinsight" "gitea"
-        "plausible" "drone" "dozzle" "vaultwarden" "ntfy" "healthchecks"
-        "adminer" "sentry" "glitchtip"
-    )
-
-    for container in "${web_services[@]}"; do
-        if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            docker network connect traefik-public "$container" 2>/dev/null || true
-            log_info "  → $container connected"
-        fi
-    done
+    # Single unified network for all services
+    docker network create infra 2>/dev/null && log_info "Created infra network" || true
 }
 
 integrate_crowdsec() {
@@ -1187,7 +1165,6 @@ run_setup() {
 
     # Post-setup integrations
     log_header "Configuring Integrations"
-    connect_traefik_services
     integrate_crowdsec
     auto_enable_ntfy
     register_monitoring_targets

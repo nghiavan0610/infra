@@ -16,13 +16,13 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthcheck"]
+      test:
+        ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3
     networks:
       - infra
-      - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
       # - "traefik.enable=true"
@@ -34,6 +34,4 @@ services:
 
 networks:
   infra:
-    external: true
-  traefik-public:
     external: true

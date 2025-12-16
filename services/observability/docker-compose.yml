@@ -95,7 +95,6 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
       - infra
 
   # ===========================================================================
@@ -143,9 +142,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
       - infra
-      - traefik-public
 
   # ===========================================================================
   # Loki - Log Aggregation
@@ -182,7 +179,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
+      - infra
 
   # ===========================================================================
   # Tempo - Distributed Tracing
@@ -219,7 +216,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
+      - infra
 
   # ===========================================================================
   # Alertmanager - Alert Routing & Notifications
@@ -259,7 +256,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
+      - infra
 
   # ===========================================================================
   # Grafana - Visualization
@@ -310,8 +307,7 @@ services:
         max-size: "10m"
         max-file: "3"
     networks:
-      - observability
-      - traefik-public
+      - infra
     depends_on:
       prometheus:
         condition: service_healthy
@@ -341,12 +337,6 @@ volumes:
 # Networks
 # =============================================================================
 networks:
-  observability:
-    driver: bridge
-    name: observability
   infra:
     external: true
     name: infra
-  traefik-public:
-    external: true
-    name: traefik-public

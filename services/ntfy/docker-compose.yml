@@ -29,7 +29,6 @@ services:
       retries: 3
     networks:
       - infra
-      - traefik-public
     labels:
       # Traefik configuration (uncomment to expose via reverse proxy)
       # - "traefik.enable=true"
@@ -45,6 +44,4 @@ volumes:
 
 networks:
   infra:
-    external: true
-  traefik-public:
     external: true

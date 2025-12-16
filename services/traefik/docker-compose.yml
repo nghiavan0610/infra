@@ -55,7 +55,7 @@ services:
       # Access logs
       - traefik_logs:/var/log/traefik
     networks:
-      - traefik-public
+      - infra
     deploy:
       resources:
         limits:
@@ -110,6 +110,6 @@ volumes:
 # Networks
 # =============================================================================
 networks:
-  traefik-public:
+  infra:
     external: true
-    name: traefik-public
+    name: infra

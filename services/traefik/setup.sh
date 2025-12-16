@@ -44,12 +44,12 @@ if ! docker compose version &> /dev/null; then
 fi
 
 # Create network if not exists
-info "Creating traefik-public network..."
-if docker network ls | grep -q traefik-public; then
-    warn "Network 'traefik-public' already exists, skipping..."
+info "Creating infra network..."
+if docker network ls | grep -q "infra"; then
+    warn "Network 'infra' already exists, skipping..."
 else
-    docker network create traefik-public
-    success "Network 'traefik-public' created"
+    docker network create infra
+    success "Network 'infra' created"
 fi
 
 # Create .env if not exists

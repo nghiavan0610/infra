@@ -51,7 +51,7 @@ services:
         max-file: "5"
     networks:
       - whisper-network
-      # - traefik-public  # Uncomment for Traefik
+      # - infra  # Uncomment for Traefik
     labels:
       # Traefik configuration
       - "traefik.enable=${TRAEFIK_ENABLED:-false}"
@@ -107,7 +107,7 @@ services:
         max-file: "5"
     networks:
       - whisper-network
-      # - traefik-public  # Uncomment for Traefik
+      # - infra  # Uncomment for Traefik
     labels:
       - "traefik.enable=${TRAEFIK_ENABLED:-false}"
       - "traefik.http.routers.whisper.rule=Host(`${WHISPER_DOMAIN:-whisper.localhost}`)"
@@ -135,6 +135,4 @@ networks:
     driver: bridge
     name: whisper-network
   # Uncomment for Traefik integration
-  # traefik-public:
   #   external: true
-  #   name: traefik-public

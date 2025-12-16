@@ -83,13 +83,13 @@ WHISPER_DOMAIN=whisper.yourdomain.com
 ```yaml
 networks:
   - whisper-network
-  - traefik-public  # Uncomment this
+  - infra  # Uncomment this
 
 # And at the bottom:
 networks:
-  traefik-public:
+  infra:
     external: true
-    name: traefik-public
+    name: infra
 ```
 
 3. Restart:

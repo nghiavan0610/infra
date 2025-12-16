@@ -68,7 +68,7 @@ services:
     #   - "traefik.http.routers.mailpit.tls.certresolver=letsencrypt"
     #   - "traefik.http.services.mailpit.loadbalancer.server.port=8025"
     networks:
-      - traefik-public
+      - infra
 
 # =============================================================================
 # Volumes
@@ -82,6 +82,6 @@ volumes:
 # Networks
 # =============================================================================
 networks:
-  traefik-public:
+  infra:
     external: true
-    name: traefik-public
+    name: infra
