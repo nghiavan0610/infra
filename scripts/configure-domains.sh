@@ -138,6 +138,32 @@ configure_domains() {
     local RESTART_SERVICES=()
 
     # -------------------------------------------------------------------------
+    # Fix acme.json permissions
+    # -------------------------------------------------------------------------
+    local ACME_JSON="$INFRA_ROOT/services/traefik/certs/acme.json"
+    if [[ -f "$ACME_JSON" ]]; then
+        chmod 600 "$ACME_JSON"
+        log_info "Fixed acme.json permissions (600)"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Check/Update ACME Email
+    # -------------------------------------------------------------------------
+    local TRAEFIK_ENV="$INFRA_ROOT/services/traefik/.env"
+    local current_email=$(grep "^ACME_EMAIL=" "$TRAEFIK_ENV" 2>/dev/null | cut -d'=' -f2)
+
+    if [[ -z "$current_email" || "$current_email" == "admin@example.com" || "$current_email" == *"example"* ]]; then
+        log_warn "ACME_EMAIL not configured properly"
+        echo ""
+        read -p "Enter your email for Let's Encrypt certificates: " acme_email
+        if [[ -n "$acme_email" ]]; then
+            set_env_var "$TRAEFIK_ENV" "ACME_EMAIL" "$acme_email"
+            log_info "ACME_EMAIL set to: $acme_email"
+        fi
+        echo ""
+    fi
+
+    # -------------------------------------------------------------------------
     # Traefik Dashboard
     # -------------------------------------------------------------------------
     log_step "Configuring Traefik..."
