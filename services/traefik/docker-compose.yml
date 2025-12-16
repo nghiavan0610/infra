@@ -51,6 +51,7 @@ services:
       - ./config/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./config/dynamic:/etc/traefik/dynamic:ro
       # SSL certificates storage
+      - ./certs:/etc/traefik/certs:ro
       - ./certs/acme.json:/etc/traefik/acme.json
       # Access logs
       - traefik_logs:/var/log/traefik

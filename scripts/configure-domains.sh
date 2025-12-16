@@ -147,6 +147,48 @@ configure_domains() {
     fi
 
     # -------------------------------------------------------------------------
+    # Generate default SSL certificate (for Cloudflare Full mode)
+    # -------------------------------------------------------------------------
+    local CERTS_DIR="$INFRA_ROOT/services/traefik/certs"
+    local CERT_FILE="$CERTS_DIR/default.pem"
+    local KEY_FILE="$CERTS_DIR/default.key"
+
+    if [[ ! -f "$CERT_FILE" ]] || [[ ! -f "$KEY_FILE" ]]; then
+        log_step "Generating default SSL certificate..."
+        mkdir -p "$CERTS_DIR"
+
+        # Generate self-signed cert valid for 10 years
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+            -keyout "$KEY_FILE" \
+            -out "$CERT_FILE" \
+            -subj "/CN=*.${BASE_DOMAIN}/O=Infra/C=US" \
+            -addext "subjectAltName=DNS:*.${BASE_DOMAIN},DNS:${BASE_DOMAIN}" \
+            2>/dev/null
+
+        chmod 600 "$KEY_FILE"
+        chmod 644 "$CERT_FILE"
+        log_info "Generated default SSL certificate for *.${BASE_DOMAIN}"
+    fi
+
+    # Create TLS config for Traefik to use this certificate
+    local TRAEFIK_DYNAMIC="$INFRA_ROOT/services/traefik/config/dynamic"
+    mkdir -p "$TRAEFIK_DYNAMIC"
+
+    cat > "$TRAEFIK_DYNAMIC/default-cert.yml" << EOF
+# Auto-generated default certificate for Cloudflare Full mode
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/default.pem
+        keyFile: /etc/traefik/certs/default.key
+  certificates:
+    - certFile: /etc/traefik/certs/default.pem
+      keyFile: /etc/traefik/certs/default.key
+EOF
+    log_info "Created default TLS config for Traefik"
+
+    # -------------------------------------------------------------------------
     # Check/Update ACME Email
     # -------------------------------------------------------------------------
     local TRAEFIK_ENV="$INFRA_ROOT/services/traefik/.env"
