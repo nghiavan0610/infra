@@ -29,6 +29,11 @@ logging {
 // Host Metrics (replaces node-exporter)
 // -----------------------------------------------------------------------------
 prometheus.exporter.unix "host" {
+  // Use host paths mounted into container
+  procfs_path = "/host/proc"
+  sysfs_path  = "/host/sys"
+  rootfs_path = "/rootfs"
+
   disable_collectors = ["arp", "bcache", "bonding", "btrfs", "infiniband", "ipvs", "nfs", "nfsd", "tapestats", "xfs", "zfs"]
   filesystem {
     mount_points_exclude = "^/(sys|proc|dev|host|etc|run|snap|var/lib/docker/.+)($$|/)"
@@ -40,12 +45,9 @@ prometheus.exporter.unix "host" {
 // Container Metrics (replaces cadvisor)
 // -----------------------------------------------------------------------------
 prometheus.exporter.cadvisor "containers" {
-  docker_host             = "unix:///var/run/docker.sock"
-  docker_only             = true
-  storage_duration        = "5m"
-  store_container_labels  = true
-  // Ensure container names are properly labeled
-  allowlist_container_labels = ["com.docker.compose.project", "com.docker.compose.service"]
+  docker_host      = "unix:///var/run/docker.sock"
+  docker_only      = true
+  storage_duration = "5m"
 }
 
 // -----------------------------------------------------------------------------
