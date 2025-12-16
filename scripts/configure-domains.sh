@@ -189,21 +189,10 @@ EOF
     log_info "Created default TLS config for Traefik"
 
     # -------------------------------------------------------------------------
-    # Check/Update ACME Email
+    # ACME Email (optional - not needed for Cloudflare Full mode)
     # -------------------------------------------------------------------------
-    local TRAEFIK_ENV="$INFRA_ROOT/services/traefik/.env"
-    local current_email=$(grep "^ACME_EMAIL=" "$TRAEFIK_ENV" 2>/dev/null | cut -d'=' -f2)
-
-    if [[ -z "$current_email" || "$current_email" == "admin@example.com" || "$current_email" == *"example"* ]]; then
-        log_warn "ACME_EMAIL not configured properly"
-        echo ""
-        read -p "Enter your email for Let's Encrypt certificates: " acme_email
-        if [[ -n "$acme_email" ]]; then
-            set_env_var "$TRAEFIK_ENV" "ACME_EMAIL" "$acme_email"
-            log_info "ACME_EMAIL set to: $acme_email"
-        fi
-        echo ""
-    fi
+    # Note: With Cloudflare proxy, we use self-signed certs so ACME/Let's Encrypt
+    # is not used. Email configuration is skipped.
 
     # -------------------------------------------------------------------------
     # Traefik Dashboard

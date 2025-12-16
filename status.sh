@@ -23,6 +23,7 @@ require_auth
 # Parse arguments
 QUICK_MODE=false
 JSON_MODE=false
+CREDS_MODE=false
 FILTER_SERVICE=""
 
 for arg in "$@"; do
@@ -33,17 +34,22 @@ for arg in "$@"; do
         --json|-j)
             JSON_MODE=true
             ;;
+        --creds|--credentials|-c)
+            CREDS_MODE=true
+            ;;
         --help|-h)
             echo "Usage: $0 [options] [service]"
             echo ""
             echo "Options:"
             echo "  -q, --quick   Quick status (running/stopped only)"
+            echo "  -c, --creds   Show credentials and URLs for all services"
             echo "  -j, --json    Output as JSON"
             echo "  -h, --help    Show this help"
             echo ""
             echo "Examples:"
             echo "  $0              # Full status report"
             echo "  $0 --quick      # Quick overview"
+            echo "  $0 --creds      # Show all credentials"
             echo "  $0 redis        # Redis service details"
             echo "  $0 postgres     # PostgreSQL service details"
             exit 0
@@ -171,6 +177,155 @@ print_section() {
 }
 
 # =============================================================================
+# Credentials Display
+# =============================================================================
+
+show_credentials() {
+    log_header "Service Credentials & URLs"
+
+    # Load domains if configured
+    local BASE_DOMAIN=""
+    if [[ -f "$SCRIPT_DIR/.domains" ]]; then
+        source "$SCRIPT_DIR/.domains"
+    fi
+
+    echo -e "${CYAN}━━━ Web Services ━━━${NC}"
+    echo ""
+
+    # Traefik
+    if is_container_running "traefik"; then
+        local traefik_host=$(grep "TRAEFIK_DASHBOARD_HOST" "$SCRIPT_DIR/services/traefik/.env" 2>/dev/null | cut -d'=' -f2)
+        local traefik_auth=$(grep "TRAEFIK_DASHBOARD_AUTH" "$SCRIPT_DIR/services/traefik/.env" 2>/dev/null | cut -d'=' -f2 | cut -d':' -f1)
+        echo -e "  ${GREEN}●${NC} Traefik Dashboard"
+        [[ -n "$traefik_host" ]] && echo -e "    URL:      https://${traefik_host}"
+        echo -e "    Local:    http://localhost:8080"
+        [[ -n "$traefik_auth" ]] && echo -e "    User:     $traefik_auth"
+        echo ""
+    fi
+
+    # Grafana
+    if is_container_running "grafana"; then
+        local grafana_user=$(grep "GRAFANA_ADMIN_USER" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
+        local grafana_pass=$(grep "GRAFANA_ADMIN_PASSWORD" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
+        local grafana_domain=$(grep "GRAFANA_DOMAIN" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} Grafana (Monitoring)"
+        [[ -n "$grafana_domain" ]] && echo -e "    URL:      https://${grafana_domain}"
+        echo -e "    Local:    http://localhost:3000"
+        echo -e "    User:     ${grafana_user:-admin}"
+        echo -e "    Password: ${grafana_pass:-<not set>}"
+        echo ""
+    fi
+
+    # Uptime Kuma
+    if is_container_running "uptime-kuma"; then
+        local status_domain=$(grep "UPTIME_KUMA_DOMAIN" "$SCRIPT_DIR/services/uptime-kuma/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} Uptime Kuma (Status Page)"
+        [[ -n "$status_domain" ]] && echo -e "    URL:      https://${status_domain}"
+        echo -e "    Local:    http://localhost:3001"
+        echo -e "    Note:     Create account on first login"
+        echo ""
+    fi
+
+    # Ntfy
+    if is_container_running "ntfy"; then
+        local ntfy_domain=$(grep "NTFY_DOMAIN" "$SCRIPT_DIR/services/ntfy/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} Ntfy (Push Notifications)"
+        [[ -n "$ntfy_domain" ]] && echo -e "    URL:      https://${ntfy_domain}"
+        echo -e "    Local:    http://localhost:8090"
+        echo ""
+    fi
+
+    # Portainer
+    if is_container_running "portainer"; then
+        echo -e "  ${GREEN}●${NC} Portainer (Container Management)"
+        echo -e "    Local:    https://localhost:9443"
+        echo -e "    Note:     Create admin account on first login"
+        echo ""
+    fi
+
+    echo -e "${CYAN}━━━ Databases ━━━${NC}"
+    echo ""
+
+    # PostgreSQL
+    if is_container_running "postgres"; then
+        local pg_user=$(grep "POSTGRES_USER" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2)
+        local pg_pass=$(grep "POSTGRES_PASSWORD" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} PostgreSQL"
+        echo -e "    Host:     localhost:5432 (external) / postgres:5432 (internal)"
+        echo -e "    User:     ${pg_user:-postgres}"
+        echo -e "    Password: ${pg_pass:-<not set>}"
+        echo -e "    DSN:      postgresql://${pg_user:-postgres}:****@postgres:5432/postgres"
+        echo ""
+    fi
+
+    # Redis
+    if is_container_running "redis-cache"; then
+        local redis_pass=$(grep "REDIS_CACHE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} Redis Cache"
+        echo -e "    Host:     localhost:6379 (external) / redis-cache:6379 (internal)"
+        echo -e "    Password: ${redis_pass:-<not set>}"
+        echo ""
+    fi
+
+    if is_container_running "redis-queue"; then
+        local redis_pass=$(grep "REDIS_QUEUE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} Redis Queue"
+        echo -e "    Host:     localhost:6380 (external) / redis-queue:6379 (internal)"
+        echo -e "    Password: ${redis_pass:-<not set>}"
+        echo ""
+    fi
+
+    # MongoDB
+    if is_container_running "mongo" || is_container_running "mongo-primary"; then
+        local mongo_user=$(grep "MONGO_INITDB_ROOT_USERNAME" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2)
+        local mongo_pass=$(grep "MONGO_INITDB_ROOT_PASSWORD" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} MongoDB"
+        echo -e "    Host:     localhost:27017 (external) / mongo:27017 (internal)"
+        echo -e "    User:     ${mongo_user:-admin}"
+        echo -e "    Password: ${mongo_pass:-<not set>}"
+        echo ""
+    fi
+
+    # MySQL
+    if is_container_running "mysql"; then
+        local mysql_pass=$(grep "MYSQL_ROOT_PASSWORD" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2)
+        echo -e "  ${GREEN}●${NC} MySQL"
+        echo -e "    Host:     localhost:3306 (external) / mysql:3306 (internal)"
+        echo -e "    User:     root"
+        echo -e "    Password: ${mysql_pass:-<not set>}"
+        echo ""
+    fi
+
+    echo -e "${CYAN}━━━ Other Services ━━━${NC}"
+    echo ""
+
+    # Shared secrets file
+    if [[ -f "$SCRIPT_DIR/.secrets" ]]; then
+        echo -e "  ${YELLOW}All shared credentials stored in:${NC}"
+        echo -e "    $SCRIPT_DIR/.secrets"
+        echo ""
+    fi
+
+    # Domains file
+    if [[ -f "$SCRIPT_DIR/.domains" ]]; then
+        echo -e "  ${YELLOW}Configured domains:${NC}"
+        echo -e "    $SCRIPT_DIR/.domains"
+        echo ""
+    fi
+
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "Quick commands:"
+    echo "  cat $SCRIPT_DIR/.secrets              # View shared secrets"
+    echo "  cat $SCRIPT_DIR/.domains              # View domain config"
+    echo "  cat services/observability/.env       # Grafana credentials"
+    echo "  cat services/postgres/.env            # PostgreSQL credentials"
+    echo ""
+}
+
+# =============================================================================
 # Service-Specific Status Functions
 # =============================================================================
 
@@ -278,6 +433,12 @@ status_security() {
 # =============================================================================
 # Main Status Report
 # =============================================================================
+
+if [[ "$CREDS_MODE" == "true" ]]; then
+    # Show credentials only
+    show_credentials
+    exit 0
+fi
 
 if [[ -n "$FILTER_SERVICE" ]]; then
     # Show specific service
