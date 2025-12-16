@@ -8,60 +8,60 @@ groups:
   - name: security
     rules:
       # =========================================================================
-      # Fail2ban Alerts
+      # Fail2ban Alerts - DISABLED (no monitoring configured)
       # =========================================================================
-      - alert: Fail2banDown
-        expr: up{job="fail2ban"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-        annotations:
-          summary: "Fail2ban is down"
-          description: "Fail2ban service has been down for more than 5 minutes."
+      # - alert: Fail2banDown
+      #   expr: up{job="fail2ban"} == 0
+      #   for: 5m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "Fail2ban is down"
+      #     description: "Fail2ban service has been down for more than 5 minutes."
 
-      - alert: Fail2banHighBanRate
-        expr: rate(fail2ban_banned_total[5m]) > 10
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-        annotations:
-          summary: "High ban rate detected"
-          description: "Fail2ban is banning more than 10 IPs per 5 minutes. Possible attack."
+      # - alert: Fail2banHighBanRate
+      #   expr: rate(fail2ban_banned_total[5m]) > 10
+      #   for: 5m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "High ban rate detected"
+      #     description: "Fail2ban is banning more than 10 IPs per 5 minutes. Possible attack."
 
       # =========================================================================
-      # Crowdsec Alerts
+      # Crowdsec Alerts - DISABLED (no monitoring configured)
       # =========================================================================
-      - alert: CrowdsecDown
-        expr: up{job="crowdsec"} == 0
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-        annotations:
-          summary: "Crowdsec is down"
-          description: "Crowdsec security engine has been down for more than 5 minutes."
+      # - alert: CrowdsecDown
+      #   expr: up{job="crowdsec"} == 0
+      #   for: 5m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "Crowdsec is down"
+      #     description: "Crowdsec security engine has been down for more than 5 minutes."
 
-      - alert: CrowdsecHighAlertRate
-        expr: rate(crowdsec_alerts_total[5m]) > 50
-        for: 5m
-        labels:
-          severity: warning
-          category: security
-        annotations:
-          summary: "High Crowdsec alert rate"
-          description: "Crowdsec is detecting more than 50 alerts per 5 minutes. Possible attack."
+      # - alert: CrowdsecHighAlertRate
+      #   expr: rate(crowdsec_alerts_total[5m]) > 50
+      #   for: 5m
+      #   labels:
+      #     severity: warning
+      #     category: security
+      #   annotations:
+      #     summary: "High Crowdsec alert rate"
+      #     description: "Crowdsec is detecting more than 50 alerts per 5 minutes. Possible attack."
 
-      - alert: CrowdsecBouncerDown
-        expr: crowdsec_bouncer_up == 0
-        for: 2m
-        labels:
-          severity: critical
-          category: security
-        annotations:
-          summary: "Crowdsec bouncer is down"
-          description: "Crowdsec bouncer {{ $labels.name }} is not connected. IPs won't be blocked."
+      # - alert: CrowdsecBouncerDown
+      #   expr: crowdsec_bouncer_up == 0
+      #   for: 2m
+      #   labels:
+      #     severity: critical
+      #     category: security
+      #   annotations:
+      #     summary: "Crowdsec bouncer is down"
+      #     description: "Crowdsec bouncer {{ $labels.name }} is not connected. IPs won't be blocked."
 
       # =========================================================================
       # Authentik Alerts

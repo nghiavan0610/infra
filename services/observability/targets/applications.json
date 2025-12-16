@@ -1,9 +1,1 @@
-[
-  {
-    "targets": ["host.docker.internal:3000"],
-    "labels": {
-      "service": "example-api",
-      "env": "development"
-    }
-  }
-]
+[]

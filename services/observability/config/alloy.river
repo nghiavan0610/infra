@@ -40,8 +40,12 @@ prometheus.exporter.unix "host" {
 // Container Metrics (replaces cadvisor)
 // -----------------------------------------------------------------------------
 prometheus.exporter.cadvisor "containers" {
-  docker_host = "unix:///var/run/docker.sock"
-  storage_duration = "5m"
+  docker_host             = "unix:///var/run/docker.sock"
+  docker_only             = true
+  storage_duration        = "5m"
+  store_container_labels  = true
+  // Ensure container names are properly labeled
+  allowlist_container_labels = ["com.docker.compose.project", "com.docker.compose.service"]
 }
 
 // -----------------------------------------------------------------------------
@@ -81,7 +85,7 @@ prometheus.scrape "integrations" {
     prometheus.exporter.postgres.main.targets,
   )
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
 }
 
 // =============================================================================
@@ -91,92 +95,99 @@ prometheus.scrape "integrations" {
 
 // -----------------------------------------------------------------------------
 // NATS Metrics (built-in monitoring)
+// Set NATS_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "nats" {
   targets = [{
-    __address__ = coalesce(sys.env("NATS_ADDR"), "nats:8222"),
+    __address__ = sys.env("NATS_ADDR"),
     job = "nats",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // RabbitMQ Metrics (built-in Prometheus plugin)
+// Set RABBITMQ_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "rabbitmq" {
   targets = [{
-    __address__ = coalesce(sys.env("RABBITMQ_ADDR"), "rabbitmq:15692"),
+    __address__ = sys.env("RABBITMQ_ADDR"),
     job = "rabbitmq",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // Traefik Metrics (built-in)
+// Set TRAEFIK_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "traefik" {
   targets = [{
-    __address__ = coalesce(sys.env("TRAEFIK_ADDR"), "traefik:8082"),
+    __address__ = sys.env("TRAEFIK_ADDR"),
     job = "traefik",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // ClickHouse Metrics (built-in)
+// Set CLICKHOUSE_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "clickhouse" {
   targets = [{
-    __address__ = coalesce(sys.env("CLICKHOUSE_ADDR"), "clickhouse:8123"),
+    __address__ = sys.env("CLICKHOUSE_ADDR"),
     job = "clickhouse",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // Meilisearch Metrics (built-in)
+// Set MEILISEARCH_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "meilisearch" {
   targets = [{
-    __address__ = coalesce(sys.env("MEILISEARCH_ADDR"), "meilisearch:7700"),
+    __address__ = sys.env("MEILISEARCH_ADDR"),
     job = "meilisearch",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // Qdrant Metrics (built-in)
+// Set QDRANT_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "qdrant" {
   targets = [{
-    __address__ = coalesce(sys.env("QDRANT_ADDR"), "qdrant:6333"),
+    __address__ = sys.env("QDRANT_ADDR"),
     job = "qdrant",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // MinIO Metrics (built-in)
+// Set MINIO_ADDR in .env to enable, leave empty to disable
 // -----------------------------------------------------------------------------
 prometheus.scrape "minio" {
   targets = [{
-    __address__ = coalesce(sys.env("MINIO_ADDR"), "minio:9000"),
+    __address__ = sys.env("MINIO_ADDR"),
     job = "minio",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/minio/v2/metrics/cluster"
 }
 
@@ -186,46 +197,49 @@ prometheus.scrape "minio" {
 
 // -----------------------------------------------------------------------------
 // HashiCorp Vault Metrics
+// Set VAULT_ADDR in .env to enable, leave empty to disable
 // Requires: telemetry { prometheus_retention_time = "60s" } in vault config
 // -----------------------------------------------------------------------------
 prometheus.scrape "vault" {
   targets = [{
-    __address__ = coalesce(sys.env("VAULT_ADDR"), "vault:8200"),
+    __address__ = sys.env("VAULT_ADDR"),
     job = "vault",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/v1/sys/metrics"
   params = { "format" = ["prometheus"] }
 }
 
 // -----------------------------------------------------------------------------
 // Authentik Metrics (Identity Provider)
+// Set AUTHENTIK_ADDR in .env to enable, leave empty to disable
 // Metrics exposed on separate port 9300
 // -----------------------------------------------------------------------------
 prometheus.scrape "authentik" {
   targets = [{
-    __address__ = coalesce(sys.env("AUTHENTIK_ADDR"), "authentik-server:9300"),
+    __address__ = sys.env("AUTHENTIK_ADDR"),
     job = "authentik",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
-// CrowdSec Metrics (Security Engine)
+// CrowdSec Metrics (Security Engine) - DISABLED
+// Uncomment if you want to monitor CrowdSec
 // Requires: cscli metrics enable
 // -----------------------------------------------------------------------------
-prometheus.scrape "crowdsec" {
-  targets = [{
-    __address__ = coalesce(sys.env("CROWDSEC_ADDR"), "crowdsec:6060"),
-    job = "crowdsec",
-  }]
-  forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
-  metrics_path = "/metrics"
-}
+// prometheus.scrape "crowdsec" {
+//   targets = [{
+//     __address__ = coalesce(sys.env("CROWDSEC_ADDR"), "crowdsec:6060"),
+//     job = "crowdsec",
+//   }]
+//   forward_to = [prometheus.remote_write.default.receiver]
+//   scrape_interval = "30s"
+//   metrics_path = "/metrics"
+// }
 
 // =============================================================================
 // METRICS COLLECTION - Development Tools
@@ -233,29 +247,31 @@ prometheus.scrape "crowdsec" {
 
 // -----------------------------------------------------------------------------
 // Gitea Metrics (Git Server)
+// Set GITEA_ADDR in .env to enable, leave empty to disable
 // Requires: [metrics] ENABLED = true in app.ini
 // -----------------------------------------------------------------------------
 prometheus.scrape "gitea" {
   targets = [{
-    __address__ = coalesce(sys.env("GITEA_ADDR"), "gitea:3000"),
+    __address__ = sys.env("GITEA_ADDR"),
     job = "gitea",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 
 // -----------------------------------------------------------------------------
 // n8n Metrics (Workflow Automation)
+// Set N8N_ADDR in .env to enable, leave empty to disable
 // Requires: N8N_METRICS=true environment variable
 // -----------------------------------------------------------------------------
 prometheus.scrape "n8n" {
   targets = [{
-    __address__ = coalesce(sys.env("N8N_ADDR"), "n8n:5678"),
+    __address__ = sys.env("N8N_ADDR"),
     job = "n8n",
   }]
   forward_to = [prometheus.remote_write.default.receiver]
-  scrape_interval = "15s"
+  scrape_interval = "30s"
   metrics_path = "/metrics"
 }
 

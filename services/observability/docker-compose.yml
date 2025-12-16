@@ -63,6 +63,9 @@ services:
       # Host metrics access
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
+      - /:/rootfs:ro
+      # cgroup v2 support for container metrics
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
       # Docker access (for container metrics & logs)
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
@@ -73,11 +76,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "${ALLOY_CPU_LIMIT:-2}"
-          memory: ${ALLOY_MEMORY_LIMIT:-1G}
+          cpus: "${ALLOY_CPU_LIMIT:-1}"
+          memory: ${ALLOY_MEMORY_LIMIT:-384M}
         reservations:
-          cpus: "0.5"
-          memory: 256M
+          cpus: "0.25"
+          memory: 128M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:12345/-/ready"]
       interval: 30s
@@ -120,11 +123,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "2"
-          memory: ${PROMETHEUS_MEMORY_LIMIT:-2G}
+          cpus: "1"
+          memory: ${PROMETHEUS_MEMORY_LIMIT:-768M}
         reservations:
-          cpus: "0.5"
-          memory: 512M
+          cpus: "0.25"
+          memory: 256M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
       interval: 30s
@@ -157,11 +160,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: ${LOKI_MEMORY_LIMIT:-1G}
+          cpus: "0.5"
+          memory: ${LOKI_MEMORY_LIMIT:-384M}
         reservations:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.1"
+          memory: 128M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
       interval: 30s
@@ -179,12 +182,17 @@ services:
       - infra
 
   # ===========================================================================
-  # Tempo - Distributed Tracing
+  # Tempo - Distributed Tracing (OPTIONAL)
   # ===========================================================================
+  # To disable: set TEMPO_ENABLED=false in .env
+  # Or run: docker compose up -d --scale tempo=0
   tempo:
     image: grafana/tempo:2.4.1
     container_name: tempo
     restart: unless-stopped
+    profiles:
+      - tracing
+      - full
     command: ["-config.file=/etc/tempo.yaml"]
     volumes:
       - ./config/tempo-config.yaml:/etc/tempo.yaml:ro
@@ -194,11 +202,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: ${TEMPO_MEMORY_LIMIT:-1G}
+          cpus: "0.5"
+          memory: ${TEMPO_MEMORY_LIMIT:-256M}
         reservations:
-          cpus: "0.25"
-          memory: 256M
+          cpus: "0.1"
+          memory: 128M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3200/ready"]
       interval: 30s
@@ -285,11 +293,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: "1"
-          memory: ${GRAFANA_MEMORY_LIMIT:-512M}
+          cpus: "0.5"
+          memory: ${GRAFANA_MEMORY_LIMIT:-256M}
         reservations:
-          cpus: "0.25"
-          memory: 128M
+          cpus: "0.1"
+          memory: 64M
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
       interval: 30s
@@ -310,8 +318,7 @@ services:
         condition: service_healthy
       loki:
         condition: service_healthy
-      tempo:
-        condition: service_healthy
+      # tempo dependency removed - Tempo is optional for small VPS
 
 # =============================================================================
 # Volumes

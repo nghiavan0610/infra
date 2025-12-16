@@ -527,16 +527,28 @@ remove_from_monitoring() {
 # =============================================================================
 # Connect Command - Register existing container with observability
 # =============================================================================
+# Supports two monitoring approaches:
+#   1. Simple metrics: App exposes /metrics endpoint (Prometheus format)
+#   2. OTEL tracing: App uses OpenTelemetry SDK for distributed tracing
+#
+# Both can be used together. Logging is always automatic via Docker logs.
+# =============================================================================
 
 cmd_connect() {
     local app_name=""
     local port="8080"
     local metrics_path="/metrics"
+    local with_metrics=false
+    local with_otel=false
+    local show_env=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --port) port="$2"; shift 2 ;;
             --metrics-path) metrics_path="$2"; shift 2 ;;
+            --metrics) with_metrics=true; shift ;;
+            --otel|--tracing) with_otel=true; shift ;;
+            --show-env) show_env=true; shift ;;
             -*) log_error "Unknown option: $1"; exit 1 ;;
             *) app_name="$1"; shift ;;
         esac
@@ -544,8 +556,33 @@ cmd_connect() {
 
     if [[ -z "$app_name" ]]; then
         log_error "App name required"
-        echo "Usage: $0 connect <container-name> --port 8080"
+        echo ""
+        echo "Usage: $0 connect <container-name> [options]"
+        echo ""
+        echo "Options:"
+        echo "  --port <port>          App port (default: 8080)"
+        echo "  --metrics              Enable Prometheus metrics scraping"
+        echo "  --metrics-path <path>  Metrics endpoint (default: /metrics)"
+        echo "  --otel                 Show OTEL tracing setup"
+        echo "  --show-env             Output env vars for copy/paste"
+        echo ""
+        echo "Examples:"
+        echo "  # Simple metrics only (app exposes /metrics)"
+        echo "  $0 connect myapi --port 8080 --metrics"
+        echo ""
+        echo "  # OTEL tracing only (app uses OpenTelemetry SDK)"
+        echo "  $0 connect myapi --otel"
+        echo ""
+        echo "  # Both metrics and tracing"
+        echo "  $0 connect myapi --port 8080 --metrics --otel"
+        echo ""
         exit 1
+    fi
+
+    # Default: enable both if neither specified
+    if [[ "$with_metrics" == "false" && "$with_otel" == "false" ]]; then
+        with_metrics=true
+        with_otel=true
     fi
 
     log_header "Connecting: $app_name"
@@ -555,25 +592,91 @@ cmd_connect() {
         log_warn "Container '$app_name' not running. Will register anyway."
     fi
 
-    # Add to Prometheus targets
-    log_step "Registering with Prometheus..."
-    add_to_monitoring "$app_name" "$port"
-    log_info "Added to monitoring targets"
+    local enabled_features=""
 
-    # Show OTEL env vars
+    # Always enabled: Logging
+    enabled_features+="  ✓ Logging  → automatic (stdout/stderr → Loki)\n"
+    enabled_features+="  ✓ Alerting → automatic (based on available metrics)\n"
+
+    # Metrics setup
+    if [[ "$with_metrics" == "true" ]]; then
+        log_step "Registering with Prometheus..."
+        add_to_monitoring "$app_name" "$port"
+        log_info "Added to targets/applications.json"
+        enabled_features+="  ✓ Metrics  → Prometheus scrapes ${app_name}:${port}${metrics_path}\n"
+    fi
+
+    # OTEL setup
+    if [[ "$with_otel" == "true" ]]; then
+        log_step "OTEL tracing configuration..."
+        enabled_features+="  ✓ Tracing  → OTEL → Alloy → Tempo\n"
+    fi
+
     echo ""
-    log_header "Done!"
+    log_header "Configuration Complete"
     echo ""
-    echo "Your container is now connected to:"
-    echo "  ✓ Logging  → automatic (stdout/stderr → Loki)"
-    echo "  ✓ Metrics  → Prometheus will scrape ${app_name}:${port}${metrics_path}"
-    echo "  ✓ Alerting → automatic (based on metrics)"
-    echo ""
-    echo "For tracing, add these to your .env:"
-    echo "  OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317"
-    echo "  OTEL_SERVICE_NAME=${app_name}"
-    echo ""
+    echo "Enabled features:"
+    echo -e "$enabled_features"
+
+    # Show metrics requirements
+    if [[ "$with_metrics" == "true" ]]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "METRICS SETUP"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Your app must expose ${metrics_path} in Prometheus format."
+        echo ""
+        echo "Common libraries:"
+        echo "  Node.js:  prom-client"
+        echo "  Python:   prometheus-client"
+        echo "  Go:       prometheus/client_golang"
+        echo "  Java:     micrometer-registry-prometheus"
+        echo ""
+        echo "Basic metrics to expose:"
+        echo "  - http_requests_total (counter)"
+        echo "  - http_request_duration_seconds (histogram)"
+        echo "  - process_cpu_seconds_total"
+        echo "  - process_resident_memory_bytes"
+        echo ""
+    fi
+
+    # Show OTEL requirements
+    if [[ "$with_otel" == "true" ]]; then
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "OTEL TRACING SETUP"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo ""
+        echo "Add these environment variables to your app:"
+        echo ""
+        if [[ "$show_env" == "true" ]]; then
+            echo "OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317"
+            echo "OTEL_SERVICE_NAME=${app_name}"
+            echo "OTEL_TRACES_EXPORTER=otlp"
+            echo "OTEL_METRICS_EXPORTER=none"
+            echo "OTEL_LOGS_EXPORTER=none"
+        else
+            echo "  OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317"
+            echo "  OTEL_SERVICE_NAME=${app_name}"
+            echo "  OTEL_TRACES_EXPORTER=otlp"
+            echo "  OTEL_METRICS_EXPORTER=none   # Use Prometheus metrics instead"
+            echo "  OTEL_LOGS_EXPORTER=none      # Use Docker logs instead"
+        fi
+        echo ""
+        echo "Common OTEL SDKs:"
+        echo "  Node.js:  @opentelemetry/auto-instrumentations-node"
+        echo "  Python:   opentelemetry-distro + opentelemetry-exporter-otlp"
+        echo "  Go:       go.opentelemetry.io/otel"
+        echo "  Java:     opentelemetry-javaagent"
+        echo ""
+        echo "Quick start (Node.js):"
+        echo "  npm install @opentelemetry/auto-instrumentations-node"
+        echo "  node --require @opentelemetry/auto-instrumentations-node/register app.js"
+        echo ""
+    fi
+
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "View in Grafana: http://localhost:3000"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
 }
 
@@ -802,58 +905,109 @@ cmd_init() {
 
 show_help() {
     cat << 'EOF'
-Application CLI - Connect backends to infrastructure
+Application CLI - Connect backends to observability stack
 
 Usage:
-  ./lib/app-cli.sh <command> [options]
+  ./scripts/app-cli.sh <command> [options]
 
 Commands:
-  connect     Connect existing container to observability (logging/metrics/tracing)
-  init        Create .env and docker-compose.yml with database credentials
+  connect     Connect existing container to observability
+  init        Create .env + docker-compose.yml with database credentials
   list        List all registered apps
   remove      Remove an app registration
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-CONNECT (for existing containers):
+CONNECT - Register existing container with observability
 
-  You create your own .env and docker-compose.yml, then connect to observability:
+  Use this when you already have a running container and want to connect it
+  to monitoring. Supports two approaches:
 
-  # After your container is running:
-  /opt/infra/lib/app-cli.sh connect myapi --port 8080
+  1. SIMPLE METRICS (Prometheus)
+     Your app exposes /metrics endpoint in Prometheus format.
+     Prometheus scrapes it automatically.
 
-  This enables:
-    ✓ Logging  - automatic (stdout → Loki)
-    ✓ Metrics  - Prometheus scrapes /metrics
-    ✓ Alerting - automatic
+     ./scripts/app-cli.sh connect myapi --port 8080 --metrics
 
-  For tracing, add to your .env:
-    OTEL_EXPORTER_OTLP_ENDPOINT=http://alloy:4317
-    OTEL_SERVICE_NAME=myapi
+  2. OTEL TRACING (OpenTelemetry)
+     Your app uses OTEL SDK for distributed tracing.
+     Traces flow: App → Alloy → Tempo → Grafana
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     ./scripts/app-cli.sh connect myapi --otel
 
-INIT (generates everything):
+  3. BOTH (recommended for production APIs)
+     Get both request metrics AND distributed traces.
 
-  # Creates .env + docker-compose.yml with database:
-  /opt/infra/lib/app-cli.sh init myapi --db postgres
-  /opt/infra/lib/app-cli.sh init myapi --db postgres --redis --domain api.example.com
+     ./scripts/app-cli.sh connect myapi --port 8080 --metrics --otel
 
   Options:
-    --db <type>     postgres, mysql, mongo
-    --redis         Include Redis credentials
-    --s3            Include S3/Garage credentials
-    --domain <host> Setup Traefik with SSL
-    --port <port>   App port (default: 8080)
+    --port <port>          App port (default: 8080)
+    --metrics              Enable Prometheus metrics scraping
+    --metrics-path <path>  Metrics endpoint (default: /metrics)
+    --otel                 Show OTEL tracing setup instructions
+    --show-env             Output env vars without indentation (copy-paste)
+
+  What's automatic:
+    ✓ Logging  - Docker stdout/stderr → Loki (no code changes)
+    ✓ Alerting - Based on available metrics
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-REQUIREMENTS:
+INIT - Generate complete app setup
 
-  Your docker-compose.yml MUST have:
+  Creates .env + docker-compose.yml with database credentials and
+  observability pre-configured. Run this in your app directory.
 
-    networks:
-      - infra
+  # Basic setup with PostgreSQL
+  ./scripts/app-cli.sh init myapi --db postgres
+
+  # Full setup with database, Redis, domain, and SSL
+  ./scripts/app-cli.sh init myapi --db postgres --redis --domain api.example.com
+
+  Options:
+    --db <type>     Database: postgres, mysql, mongo
+    --redis         Include Redis credentials
+    --s3            Include S3/Garage credentials
+    --domain <host> Setup Traefik routing with auto-SSL
+    --port <port>   App port (default: 8080)
+    --image <name>  Docker image (default: <app-name>:latest)
+
+  Generated .env includes:
+    - DATABASE_URL and DB_* variables
+    - REDIS_URL (if --redis)
+    - S3_ENDPOINT and AWS_* (if --s3)
+    - OTEL_* variables for tracing
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+QUICK DECISION GUIDE
+
+  Which approach should I use?
+
+  Simple REST API with request metrics only:
+    → Use --metrics only
+    → Add prom-client/prometheus-client to your app
+    → Expose /metrics endpoint
+
+  Microservices that call each other:
+    → Use --otel for distributed tracing
+    → See request flow across services in Tempo
+
+  Production API (recommended):
+    → Use both --metrics --otel
+    → Get request metrics + distributed traces
+    → Full observability
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+REQUIREMENTS
+
+  Your docker-compose.yml MUST connect to the infra network:
+
+    services:
+      myapi:
+        networks:
+          - infra
 
     networks:
       infra:

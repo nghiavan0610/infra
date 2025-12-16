@@ -46,7 +46,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(container_last_seen{name!=\"\"})",
+          "expr": "count(container_memory_usage_bytes{name=~\".+\"})",
           "refId": "A"
         }
       ]
@@ -89,7 +89,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(container_memory_usage_bytes{name!=\"\"})",
+          "expr": "sum(container_memory_usage_bytes{name=~\".+\"})",
           "refId": "A"
         }
       ]
@@ -132,7 +132,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(container_cpu_usage_seconds_total{name!=\"\"}[5m])) * 100",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\".+\"}[5m])) * 100",
           "refId": "A"
         }
       ]
@@ -175,7 +175,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(container_network_receive_bytes_total{name!=\"\"}[5m]))",
+          "expr": "sum(rate(container_network_receive_bytes_total{name=~\".+\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -218,7 +218,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(container_network_transmit_bytes_total{name!=\"\"}[5m]))",
+          "expr": "sum(rate(container_network_transmit_bytes_total{name=~\".+\"}[5m]))",
           "refId": "A"
         }
       ]
@@ -291,7 +291,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]) * 100",
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\".+\"}[5m]) * 100",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -365,7 +365,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{name!=\"\"}",
+          "expr": "container_memory_usage_bytes{name=~\".+\"}",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -439,7 +439,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(container_network_receive_bytes_total{name!=\"\"}[5m])",
+          "expr": "rate(container_network_receive_bytes_total{name=~\".+\"}[5m])",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -513,7 +513,7 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rate(container_network_transmit_bytes_total{name!=\"\"}[5m])",
+          "expr": "rate(container_network_transmit_bytes_total{name=~\".+\"}[5m])",
           "legendFormat": "{{name}}",
           "refId": "A"
         }
@@ -549,6 +549,7 @@
             "matcher": {"id": "byName", "options": "CPU %"},
             "properties": [
               {"id": "unit", "value": "percent"},
+              {"id": "decimals", "value": 1},
               {"id": "custom.cellOptions", "value": {"mode": "gradient", "type": "gauge"}},
               {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 50}, {"color": "red", "value": 80}]}}
             ]
@@ -560,10 +561,16 @@
               {"id": "custom.cellOptions", "value": {"mode": "gradient", "type": "gauge"}},
               {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 500000000}, {"color": "red", "value": 1000000000}]}}
             ]
+          },
+          {
+            "matcher": {"id": "byName", "options": "Container"},
+            "properties": [
+              {"id": "custom.width", "value": 200}
+            ]
           }
         ]
       },
-      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 20},
       "id": 10,
       "options": {
         "cellHeight": "sm",
@@ -573,20 +580,21 @@
           "reducer": ["sum"],
           "show": false
         },
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [{"desc": true, "displayName": "Memory"}]
       },
       "title": "Container Overview",
       "type": "table",
       "targets": [
         {
-          "expr": "container_memory_usage_bytes{name!=\"\"}",
+          "expr": "container_memory_usage_bytes{name=~\".+\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "",
           "refId": "A"
         },
         {
-          "expr": "rate(container_cpu_usage_seconds_total{name!=\"\"}[5m]) * 100",
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\".+\"}[5m]) * 100",
           "format": "table",
           "instant": true,
           "legendFormat": "",
@@ -608,13 +616,22 @@
               "image": true,
               "instance": true,
               "job": true,
-              "service": true
+              "service": true,
+              "container_label_com_docker_compose_project": true,
+              "container_label_com_docker_compose_service": true
             },
             "renameByName": {
               "Value #A": "Memory",
               "Value #B": "CPU %",
               "name": "Container"
             }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [{"field": "Memory", "desc": true}]
           }
         }
       ]
@@ -623,7 +640,7 @@
   "refresh": "30s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["docker", "containers", "cadvisor"],
+  "tags": ["docker", "containers"],
   "templating": {
     "list": []
   },

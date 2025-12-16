@@ -825,75 +825,130 @@ register_monitoring_targets() {
         fi
     }
 
-    # Configure Alloy based on installed services
-    for service in "${!INSTALLED_SERVICES[@]}"; do
-        case "$service" in
-            postgres|postgres-ha)
-                # Read directly from postgres .env to ensure correct password
-                local pg_env="$SCRIPT_DIR/services/postgres/.env"
-                local pg_user="postgres"
-                local pg_pass=""
-                if [[ -f "$pg_env" ]]; then
-                    pg_user=$(grep "^POSTGRES_USER=" "$pg_env" 2>/dev/null | cut -d= -f2 || echo "postgres")
-                    pg_pass=$(grep "^POSTGRES_PASSWORD=" "$pg_env" 2>/dev/null | cut -d= -f2)
-                fi
-                pg_user="${pg_user:-postgres}"
-                pg_pass="${pg_pass:-${SHARED_POSTGRES_PASSWORD:-postgres}}"
-                # URL-encode password for DSN (handles +, @, and other special chars)
-                local pg_pass_encoded=$(url_encode_password "$pg_pass")
-                set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass_encoded}@postgres:5432/postgres?sslmode=disable"
-                log_info "  → PostgreSQL configured for Alloy"
-                ;;
-            redis)
-                # Read directly from redis .env to ensure correct password
-                local redis_env="$SCRIPT_DIR/services/redis/.env"
-                local redis_pass=""
-                if [[ -f "$redis_env" ]]; then
-                    redis_pass=$(grep "^REDIS_CACHE_PASSWORD=" "$redis_env" 2>/dev/null | cut -d= -f2)
-                fi
-                redis_pass="${redis_pass:-${SHARED_REDIS_PASSWORD:-}}"
-                set_obs_env "REDIS_PASSWORD" "$redis_pass"
-                set_obs_env "REDIS_CACHE_ADDR" "redis-cache:6379"
-                set_obs_env "REDIS_QUEUE_ADDR" "redis-queue:6379"
-                log_info "  → Redis (cache + queue) configured for Alloy"
-                ;;
-            # NOTE: MongoDB, MySQL, Memcached, Kafka, OpenSearch require external exporters
-            # These are scraped via prometheus.scrape if you deploy their exporters separately
-            mongo|mysql|memcached|kafka|opensearch)
-                log_info "  → ${service} uses external exporter (deploy separately if needed)"
-                ;;
-            nats)
-                set_obs_env "NATS_ADDR" "nats:8222"
-                log_info "  → NATS configured for Alloy"
-                ;;
-            rabbitmq)
-                set_obs_env "RABBITMQ_ADDR" "rabbitmq:15692"
-                log_info "  → RabbitMQ configured for Alloy"
-                ;;
-            traefik)
-                set_obs_env "TRAEFIK_ADDR" "traefik:8080"
-                log_info "  → Traefik configured for Alloy"
-                ;;
-            clickhouse)
-                set_obs_env "CLICKHOUSE_ADDR" "clickhouse:8123"
-                log_info "  → ClickHouse configured for Alloy"
-                ;;
-            meilisearch)
-                set_obs_env "MEILISEARCH_ADDR" "meilisearch:7700"
-                log_info "  → Meilisearch configured for Alloy"
-                ;;
-            qdrant)
-                set_obs_env "QDRANT_ADDR" "qdrant:6333"
-                log_info "  → Qdrant configured for Alloy"
-                ;;
-            minio)
-                set_obs_env "MINIO_ADDR" "minio:9000"
-                log_info "  → MinIO configured for Alloy"
-                ;;
-            garage)
-                # Garage needs bearer token - create target file
-                mkdir -p "$SCRIPT_DIR/services/observability/targets"
-                cat > "$SCRIPT_DIR/services/observability/targets/garage.json" << 'EOF'
+    # Helper to check if service is installed
+    is_service_installed() {
+        [[ -n "${INSTALLED_SERVICES[$1]}" ]]
+    }
+
+    # =========================================================================
+    # Core Databases (with credentials)
+    # =========================================================================
+
+    # PostgreSQL
+    if is_service_installed "postgres" || is_service_installed "postgres-ha"; then
+        local pg_env="$SCRIPT_DIR/services/postgres/.env"
+        local pg_user="postgres"
+        local pg_pass=""
+        if [[ -f "$pg_env" ]]; then
+            pg_user=$(grep "^POSTGRES_USER=" "$pg_env" 2>/dev/null | cut -d= -f2 || echo "postgres")
+            pg_pass=$(grep "^POSTGRES_PASSWORD=" "$pg_env" 2>/dev/null | cut -d= -f2)
+        fi
+        pg_user="${pg_user:-postgres}"
+        pg_pass="${pg_pass:-${SHARED_POSTGRES_PASSWORD:-postgres}}"
+        local pg_pass_encoded=$(url_encode_password "$pg_pass")
+        set_obs_env "POSTGRES_DSN" "postgresql://${pg_user}:${pg_pass_encoded}@postgres:5432/postgres?sslmode=disable"
+        log_info "  ✓ PostgreSQL monitoring enabled"
+    else
+        set_obs_env "POSTGRES_DSN" ""
+        log_info "  ○ PostgreSQL monitoring disabled"
+    fi
+
+    # Redis
+    if is_service_installed "redis"; then
+        local redis_env="$SCRIPT_DIR/services/redis/.env"
+        local redis_pass=""
+        if [[ -f "$redis_env" ]]; then
+            redis_pass=$(grep "^REDIS_CACHE_PASSWORD=" "$redis_env" 2>/dev/null | cut -d= -f2)
+        fi
+        redis_pass="${redis_pass:-${SHARED_REDIS_PASSWORD:-}}"
+        set_obs_env "REDIS_PASSWORD" "$redis_pass"
+        set_obs_env "REDIS_CACHE_ADDR" "redis-cache:6379"
+        set_obs_env "REDIS_QUEUE_ADDR" "redis-queue:6379"
+        log_info "  ✓ Redis monitoring enabled"
+    else
+        set_obs_env "REDIS_PASSWORD" ""
+        set_obs_env "REDIS_CACHE_ADDR" ""
+        set_obs_env "REDIS_QUEUE_ADDR" ""
+        log_info "  ○ Redis monitoring disabled"
+    fi
+
+    # =========================================================================
+    # Message Queues & Streaming
+    # =========================================================================
+
+    # NATS
+    if is_service_installed "nats"; then
+        set_obs_env "NATS_ADDR" "nats:8222"
+        log_info "  ✓ NATS monitoring enabled"
+    else
+        set_obs_env "NATS_ADDR" ""
+    fi
+
+    # RabbitMQ
+    if is_service_installed "rabbitmq"; then
+        set_obs_env "RABBITMQ_ADDR" "rabbitmq:15692"
+        log_info "  ✓ RabbitMQ monitoring enabled"
+    else
+        set_obs_env "RABBITMQ_ADDR" ""
+    fi
+
+    # =========================================================================
+    # Infrastructure Services
+    # =========================================================================
+
+    # Traefik (reverse proxy)
+    if is_service_installed "traefik"; then
+        set_obs_env "TRAEFIK_ADDR" "traefik:8082"
+        log_info "  ✓ Traefik monitoring enabled"
+    else
+        set_obs_env "TRAEFIK_ADDR" ""
+    fi
+
+    # =========================================================================
+    # Data & Analytics
+    # =========================================================================
+
+    # ClickHouse
+    if is_service_installed "clickhouse"; then
+        set_obs_env "CLICKHOUSE_ADDR" "clickhouse:8123"
+        log_info "  ✓ ClickHouse monitoring enabled"
+    else
+        set_obs_env "CLICKHOUSE_ADDR" ""
+    fi
+
+    # Meilisearch
+    if is_service_installed "meilisearch"; then
+        set_obs_env "MEILISEARCH_ADDR" "meilisearch:7700"
+        log_info "  ✓ Meilisearch monitoring enabled"
+    else
+        set_obs_env "MEILISEARCH_ADDR" ""
+    fi
+
+    # Qdrant (vector database)
+    if is_service_installed "qdrant"; then
+        set_obs_env "QDRANT_ADDR" "qdrant:6333"
+        log_info "  ✓ Qdrant monitoring enabled"
+    else
+        set_obs_env "QDRANT_ADDR" ""
+    fi
+
+    # =========================================================================
+    # Storage Services
+    # =========================================================================
+
+    # MinIO
+    if is_service_installed "minio"; then
+        set_obs_env "MINIO_ADDR" "minio:9000"
+        log_info "  ✓ MinIO monitoring enabled"
+    else
+        set_obs_env "MINIO_ADDR" ""
+    fi
+
+    # Garage (S3-compatible storage with bearer token)
+    local garage_target="$SCRIPT_DIR/services/observability/targets/garage.json"
+    if is_service_installed "garage"; then
+        mkdir -p "$SCRIPT_DIR/services/observability/targets"
+        cat > "$garage_target" << 'EOF'
 [
   {
     "targets": ["garage:3903"],
@@ -901,12 +956,59 @@ register_monitoring_targets() {
   }
 ]
 EOF
-                log_info "  → Garage target file created (requires bearer token)"
-                ;;
-            langfuse)
-                # LangFuse has custom endpoint - create target file
-                mkdir -p "$SCRIPT_DIR/services/observability/targets"
-                cat > "$SCRIPT_DIR/services/observability/targets/langfuse.json" << 'EOF'
+        log_info "  ✓ Garage monitoring enabled (requires bearer token)"
+    else
+        rm -f "$garage_target"
+    fi
+
+    # =========================================================================
+    # Security & Identity Services
+    # =========================================================================
+
+    # Vault
+    if is_service_installed "vault"; then
+        set_obs_env "VAULT_ADDR" "vault:8200"
+        log_info "  ✓ Vault monitoring enabled"
+    else
+        set_obs_env "VAULT_ADDR" ""
+    fi
+
+    # Authentik
+    if is_service_installed "authentik"; then
+        set_obs_env "AUTHENTIK_ADDR" "authentik-server:9300"
+        log_info "  ✓ Authentik monitoring enabled"
+    else
+        set_obs_env "AUTHENTIK_ADDR" ""
+    fi
+
+    # CrowdSec - monitoring disabled by default (security tools work without monitoring)
+    set_obs_env "CROWDSEC_ADDR" ""
+
+    # =========================================================================
+    # Development & Productivity Tools
+    # =========================================================================
+
+    # Gitea
+    if is_service_installed "gitea"; then
+        set_obs_env "GITEA_ADDR" "gitea:3000"
+        log_info "  ✓ Gitea monitoring enabled"
+    else
+        set_obs_env "GITEA_ADDR" ""
+    fi
+
+    # n8n
+    if is_service_installed "n8n"; then
+        set_obs_env "N8N_ADDR" "n8n:5678"
+        log_info "  ✓ n8n monitoring enabled"
+    else
+        set_obs_env "N8N_ADDR" ""
+    fi
+
+    # LangFuse (LLM observability - uses file-based discovery)
+    local langfuse_target="$SCRIPT_DIR/services/observability/targets/langfuse.json"
+    if is_service_installed "langfuse"; then
+        mkdir -p "$SCRIPT_DIR/services/observability/targets"
+        cat > "$langfuse_target" << 'EOF'
 [
   {
     "targets": ["langfuse:3000"],
@@ -914,38 +1016,22 @@ EOF
   }
 ]
 EOF
-                log_info "  → LangFuse target file created"
-                ;;
-            # Security & Identity services
-            vault)
-                set_obs_env "VAULT_ADDR" "vault:8200"
-                log_info "  → Vault configured for Alloy (metrics auto-enabled)"
-                ;;
-            authentik)
-                set_obs_env "AUTHENTIK_ADDR" "authentik-server:9300"
-                log_info "  → Authentik configured for Alloy"
-                ;;
-            crowdsec)
-                set_obs_env "CROWDSEC_ADDR" "crowdsec:6060"
-                log_info "  → CrowdSec configured for Alloy (metrics auto-enabled)"
-                ;;
-            # Development tools
-            gitea)
-                set_obs_env "GITEA_ADDR" "gitea:3000"
-                log_info "  → Gitea configured for Alloy (metrics auto-enabled)"
-                ;;
-            n8n)
-                set_obs_env "N8N_ADDR" "n8n:5678"
-                log_info "  → n8n configured for Alloy (metrics auto-enabled)"
-                ;;
-        esac
-    done
+        log_info "  ✓ LangFuse monitoring enabled"
+    else
+        rm -f "$langfuse_target"
+    fi
 
-    # Restart Alloy to pick up new credentials
+    # =========================================================================
+    # Summary & Restart
+    # =========================================================================
+
+    log_info "Monitoring configuration complete"
+
+    # Restart Alloy to pick up new configuration
     if is_container_running "alloy"; then
         log_step "Restarting Alloy to apply new configuration..."
         docker restart alloy >/dev/null 2>&1
-        log_info "  → Alloy restarted"
+        log_info "  ✓ Alloy restarted"
     fi
 }
 
