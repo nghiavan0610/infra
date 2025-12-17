@@ -1044,6 +1044,49 @@ auto_enable_ntfy() {
     fi
 }
 
+# =============================================================================
+# Sync Alert Rules with services.conf
+# =============================================================================
+# Automatically enables/disables Prometheus alert rules based on which services
+# are enabled in services.conf. This ensures you only get alerts for services
+# you're actually running.
+#
+# - Core alerts (infrastructure, containers, observability) are always enabled
+# - Service-specific alerts are enabled only if the service is enabled
+# - App instrumentation alerts (task-queue, application) are disabled by default
+# =============================================================================
+sync_alert_rules() {
+    if [[ -z "${INSTALLED_SERVICES[observability]}" ]]; then
+        return
+    fi
+
+    log_step "Syncing alert rules with services.conf..."
+
+    local toggle_script="$SCRIPT_DIR/services/observability/scripts/toggle-alerts.sh"
+
+    if [[ ! -x "$toggle_script" ]]; then
+        log_warn "toggle-alerts.sh not found or not executable"
+        return
+    fi
+
+    # Run sync in quiet mode (no output, just apply changes)
+    if "$toggle_script" sync-quiet 2>/dev/null; then
+        # Count enabled/disabled for summary
+        local enabled=$(ls "$SCRIPT_DIR/services/observability/config/alerting-rules/"*.yml 2>/dev/null | wc -l | tr -d ' ')
+        local disabled=$(ls "$SCRIPT_DIR/services/observability/config/alerting-rules/"*.yml.disabled 2>/dev/null | wc -l | tr -d ' ')
+        log_info "  ✓ Alert rules synced ($enabled enabled, $disabled disabled)"
+    else
+        log_warn "Failed to sync alert rules"
+    fi
+
+    # Reload Prometheus if running
+    if is_container_running "prometheus"; then
+        if curl -s -X POST http://localhost:9090/-/reload >/dev/null 2>&1; then
+            log_info "  ✓ Prometheus configuration reloaded"
+        fi
+    fi
+}
+
 configure_backup() {
     if [[ -z "${INSTALLED_SERVICES[backup]}" ]]; then
         return
@@ -1256,6 +1299,7 @@ run_setup() {
     integrate_crowdsec
     auto_enable_ntfy
     register_monitoring_targets
+    sync_alert_rules
     configure_backup
 
     log_info "All integrations configured"
@@ -1305,7 +1349,7 @@ show_summary() {
     if [[ -n "${INSTALLED_SERVICES[observability]}" ]]; then
         echo "Monitoring & Alerts:"
         echo "  ✓ All services auto-registered with Prometheus"
-        echo "  ✓ Alert rules enabled for all databases & queues"
+        echo "  ✓ Alert rules auto-synced with services.conf"
         if [[ -n "${INSTALLED_SERVICES[ntfy]}" ]]; then
             echo "  ✓ Alerts → Ntfy push notifications"
             echo ""
@@ -1313,6 +1357,9 @@ show_summary() {
             echo "    - Open http://localhost:8090"
             echo "    - Subscribe to topics: alerts, alerts-critical, alerts-warning"
         fi
+        echo ""
+        echo "  Manage alerts manually:"
+        echo "    cd services/observability && ./scripts/toggle-alerts.sh list"
         echo ""
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         echo ""

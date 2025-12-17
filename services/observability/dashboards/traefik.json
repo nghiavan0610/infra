@@ -94,7 +94,7 @@
       "title": "Active Services",
       "type": "stat",
       "targets": [
-        {"expr": "traefik_service_server_up{instance=~\"$instance\"}", "legendFormat": "Services", "refId": "A"}
+        {"expr": "count(count by (service) (traefik_service_requests_total{instance=~\"$instance\"}))", "legendFormat": "Services", "refId": "A"}
       ]
     },
     {
@@ -150,7 +150,7 @@
       "title": "Open Connections",
       "type": "stat",
       "targets": [
-        {"expr": "sum(traefik_entrypoint_open_connections{instance=~\"$instance\"})", "legendFormat": "Connections", "refId": "A"}
+        {"expr": "sum(traefik_entrypoint_open_connections{instance=~\"$instance\"}) or sum(traefik_entrypoint_requests_total{instance=~\"$instance\"}) * 0", "legendFormat": "Connections", "refId": "A"}
       ]
     },
     {

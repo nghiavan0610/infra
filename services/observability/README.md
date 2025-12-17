@@ -271,8 +271,8 @@ Alerts are organized into **modular files** in `config/alerting-rules/`:
 | `05-redis.yml` | Redis | Memory, connections, replication |
 | `06-nats.yml` | NATS | JetStream, consumers, connections |
 | `07-task-queue.yml` | Task Queue | Asynq/BullMQ queue health |
-| `08-application.yml` | Application | HTTP error rate, latency |
 | `09-rabbitmq.yml` | RabbitMQ | Connections, queues, memory |
+| `app-{name}.yml` | Custom App | Per-app alerts via `app-cli.sh --alerts` |
 | `10-mongodb.yml` | MongoDB | Connections, replication, storage |
 | `11-traefik.yml` | Traefik | Requests, errors, certificates |
 | `12-garage.yml` | Garage | S3 storage, replication, latency |
@@ -344,9 +344,10 @@ Alerts are organized into **modular files** in `config/alerting-rules/`:
 - RetryQueueGrowing (>100)
 - BullMQQueueBacklog / BullMQFailedJobs (Node.js)
 
-**Application (08-application.yml):**
-- HighErrorRate (>5% 5xx errors)
-- HighLatency (p95 >1s)
+**Application Alerts (per-app via `app-cli.sh --alerts`):**
+- Create custom alerts for each app
+- Template includes: error rate, latency, no-traffic alerts
+- Customize with business-specific alerts
 
 </details>
 
@@ -354,9 +355,33 @@ Alerts are organized into **modular files** in `config/alerting-rules/`:
 
 ### Toggle Alert Categories
 
-You can enable/disable alert categories using **two methods**:
+Alert rules are **automatically synced** with `services.conf` when you run `./setup.sh`. You can also manage them manually.
 
-#### Method 1: CLI Script (Recommended)
+#### Automatic Sync (Recommended)
+
+When you run `./setup.sh`, alert rules are automatically enabled/disabled based on which services are enabled in `services.conf`:
+
+```
+services.conf           →  Alert Rules
+───────────────────────────────────────
+postgres=true           →  04-postgresql.yml enabled
+redis=true              →  05-redis.yml enabled
+nats=false              →  06-nats.yml disabled
+traefik=true            →  11-traefik.yml enabled
+```
+
+**Core alerts** (infrastructure, containers, observability) are **always enabled**.
+
+**App instrumentation alerts** (task-queue, application) are **disabled by default** because they require code changes in your apps to expose metrics.
+
+To manually re-sync:
+
+```bash
+cd /path/to/observability
+./scripts/toggle-alerts.sh sync
+```
+
+#### Manual Control
 
 ```bash
 cd /path/to/observability
@@ -373,7 +398,7 @@ cd /path/to/observability
 #   [enabled]  redis
 #   [disabled] nats
 #   [disabled] task-queue
-#   [enabled]  application
+#   [disabled] application
 ```
 
 **Enable/Disable specific categories:**
@@ -383,9 +408,9 @@ cd /path/to/observability
 ./scripts/toggle-alerts.sh disable nats
 ./scripts/toggle-alerts.sh disable task-queue
 
-# Enable alerts
-./scripts/toggle-alerts.sh enable postgresql
-./scripts/toggle-alerts.sh enable redis
+# Enable alerts (e.g., after adding app instrumentation)
+./scripts/toggle-alerts.sh enable application
+./scripts/toggle-alerts.sh enable task-queue
 
 # Bulk operations
 ./scripts/toggle-alerts.sh disable-all    # Disable everything
@@ -403,11 +428,20 @@ cd /path/to/observability
 | `redis` | 05-redis.yml |
 | `nats` | 06-nats.yml |
 | `task-queue`, `taskqueue`, `asynq`, `bullmq` | 07-task-queue.yml |
-| `application`, `app` | 08-application.yml |
+| `rabbitmq` | 09-rabbitmq.yml |
+| `mongodb`, `mongo` | 10-mongodb.yml |
+| `traefik` | 11-traefik.yml |
+| `garage` | 12-garage.yml |
+| `security`, `authentik`, `vault` | 13-security.yml |
+| `mysql` | 14-mysql.yml |
+| `memcached` | 15-memcached.yml |
+| `clickhouse` | 16-clickhouse.yml |
+| `kafka` | 17-kafka.yml |
+| `minio` | 18-minio.yml |
 
-#### Method 2: Environment Variables
+#### Legacy: Environment Variables
 
-Configure in `.env` file and apply:
+You can also configure in `.env` file and apply:
 
 ```bash
 # .env
@@ -418,11 +452,11 @@ ALERTS_POSTGRESQL=true
 ALERTS_REDIS=true
 ALERTS_NATS=false           # Disabled - not using NATS
 ALERTS_TASK_QUEUE=false     # Disabled - no background jobs yet
-ALERTS_APPLICATION=true
+ALERTS_APPLICATION=false
 ```
 
 ```bash
-# Apply settings from .env
+# Apply settings from .env (legacy method)
 ./scripts/toggle-alerts.sh apply
 
 # Output:
@@ -475,35 +509,99 @@ curl http://localhost:9093/api/v2/alerts
 
 ## Application Monitoring
 
-### Registering Applications with Prometheus
+### Connecting Your Applications
 
-**Method 1: File-based**
+Use the `app-cli.sh connect` command from the infra root to connect your apps to observability:
 
-Add to `targets/applications.json`:
+```bash
+cd /path/to/infra
+
+# Option 1: Prometheus metrics only (simple)
+# Your app exposes /metrics endpoint with Prometheus format
+./scripts/app-cli.sh connect my-api --port 8080 --metrics
+
+# Option 2: OpenTelemetry tracing (full observability)
+# Your app sends traces via OTLP protocol
+./scripts/app-cli.sh connect my-api --port 8080 --otel
+
+# Option 3: Both metrics and tracing
+./scripts/app-cli.sh connect my-api --port 8080 --metrics --otel
+
+# Show environment variables to add to your app
+./scripts/app-cli.sh connect my-api --otel --show-env
+```
+
+### Prometheus Metrics Setup
+
+If using `--metrics`, your app must expose a `/metrics` endpoint in Prometheus format:
+
+**Node.js (prom-client):**
+```javascript
+const client = require('prom-client');
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics();
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+```
+
+**Go (prometheus/client_golang):**
+```go
+import "github.com/prometheus/client_golang/prometheus/promhttp"
+http.Handle("/metrics", promhttp.Handler())
+```
+
+**Python (prometheus-client):**
+```python
+from prometheus_client import make_wsgi_app
+app.wsgi_app = DispatcherMiddleware(app.wsgi_app, {'/metrics': make_wsgi_app()})
+```
+
+### OpenTelemetry Setup
+
+If using `--otel`, configure your app with these environment variables:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
+OTEL_EXPORTER_OTLP_PROTOCOL=grpc
+OTEL_SERVICE_NAME=my-api
+OTEL_TRACES_EXPORTER=otlp
+```
+
+**OTLP Endpoints:**
+- gRPC: `localhost:4317`
+- HTTP: `localhost:4318`
+
+### Building Custom Dashboards
+
+Since each application has unique metrics, create custom Grafana dashboards:
+
+1. Go to Grafana > Dashboards > New Dashboard
+2. Query your app's metrics using the `service` label
+3. Export as JSON and save to `dashboards/` folder for version control
+
+**Example query for your app:**
+```promql
+rate(http_requests_total{service="my-api"}[5m])
+```
+
+### Manual Target Registration
+
+You can also manually add targets to `targets/applications.json`:
+
 ```json
 [
   {
-    "targets": ["host.docker.internal:3000"],
-    "labels": { "service": "my-api", "env": "production" }
+    "targets": ["host.docker.internal:8080"],
+    "labels": {
+      "service": "my-api",
+      "env": "production"
+    }
   }
 ]
 ```
-
-**Method 2: Docker labels (auto-discovery)**
-
-```yaml
-services:
-  my-api:
-    labels:
-      - "prometheus.scrape=true"
-      - "prometheus.port=3000"
-```
-
-### OpenTelemetry Endpoints
-
-For distributed tracing:
-- gRPC: `localhost:4317`
-- HTTP: `localhost:4318`
 
 ---
 
@@ -522,22 +620,15 @@ Go to Grafana > Dashboards > Import, use these IDs:
 | Loki Logs | 13639 | Log exploration |
 
 **Pre-installed Dashboards (auto-provisioned):**
+
 | Dashboard | File | Description |
 |-----------|------|-------------|
 | **Logs** | logs.json | Log search, volume, errors (Loki) |
 | **Alertmanager** | alertmanager.json | Active alerts, silences, history |
-| **Application** | application.json | HTTP requests, latency, errors |
-| **Backend - API** | backend-api.json | API performance by endpoint (OTEL) |
-| **Backend - Dependencies** | backend-dependencies.json | External APIs, DB, cache metrics |
-| **Backend - Business** | backend-business.json | Custom KPIs, orders, users, events |
-| **Backend - Runtime** | backend-runtime.json | GC, memory, event loop, goroutines |
-| **Monolith Overview** | monolith-overview.json | All-in-one app dashboard (Prometheus metrics) |
-| **Security** | security.json | Fail2ban & Crowdsec intrusion prevention |
 | **Backup** | backup.json | Restic backup status & snapshots |
 | Observability Overview | observability-overview.json | Stack health status |
 | Host Metrics | node-exporter.json | Host metrics (CPU, RAM, disk) via Alloy |
 | Docker Containers | docker-containers.json | Container resources via Alloy |
-| Task Queue | task-queue.json | Asynq/BullMQ metrics |
 | PostgreSQL | postgresql.json | Connections, transactions, I/O |
 | Redis | redis.json | Memory, operations, keys |
 | MongoDB | mongodb.json | Operations, connections, replication |
@@ -554,6 +645,8 @@ Go to Grafana > Dashboards > Import, use these IDs:
 | LangFuse | langfuse.json | LLM traces, costs, latency |
 | Vault | vault.json | Secrets, tokens, leases |
 
+> **Note:** Application-specific dashboards should be created per-app since each has unique metrics. See [Application Monitoring](#application-monitoring).
+
 ### Pre-configured Datasources
 
 - **Prometheus** - Metrics (default)
@@ -569,23 +662,51 @@ All datasources are linked for seamless navigation between metrics, logs, and tr
 
 ### Resource Limits
 
-Adjust in `.env` based on your VPS:
+Optimized for small VPS (2 OCPU, 10GB RAM). Total observability stack: ~2GB RAM.
+
+**Default limits (configured in docker-compose.yml):**
+
+| Component | Memory | CPU | Notes |
+|-----------|--------|-----|-------|
+| Alloy | 384M | 1.0 | Unified collector |
+| Prometheus | 768M | 1.0 | Metrics storage |
+| Loki | 384M | 0.5 | Log aggregation |
+| Tempo | 256M | 0.5 | Tracing (optional) |
+| Grafana | 256M | 0.5 | Visualization |
+| Alertmanager | 256M | 0.5 | Alert routing |
+
+**Adjust in `.env` for larger VPS:**
 
 ```bash
-# Small VPS (4GB RAM)
-PROMETHEUS_MEMORY_LIMIT=1G
-LOKI_MEMORY_LIMIT=512M
+# Small VPS (4-10GB RAM) - Default
+PROMETHEUS_MEMORY_LIMIT=768M
+LOKI_MEMORY_LIMIT=384M
 GRAFANA_MEMORY_LIMIT=256M
+ALLOY_MEMORY_LIMIT=384M
 
-# Medium VPS (8-16GB RAM) - Default
+# Medium VPS (16GB+ RAM)
 PROMETHEUS_MEMORY_LIMIT=2G
 LOKI_MEMORY_LIMIT=1G
 GRAFANA_MEMORY_LIMIT=512M
+ALLOY_MEMORY_LIMIT=512M
 
 # Large VPS (32GB+ RAM)
 PROMETHEUS_MEMORY_LIMIT=4G
 LOKI_MEMORY_LIMIT=2G
 GRAFANA_MEMORY_LIMIT=1G
+ALLOY_MEMORY_LIMIT=1G
+```
+
+### Tempo (Distributed Tracing)
+
+Tempo is **optional** and disabled by default to save resources. Enable it when you need distributed tracing:
+
+```bash
+# Start with tracing support
+docker compose --profile tracing up -d
+
+# Or start with all optional components
+docker compose --profile full up -d
 ```
 
 ### Data Retention
@@ -673,8 +794,14 @@ curl -X POST http://localhost:9090/-/reload
 ## CLI Commands
 
 ```bash
-# Start all services
+# Start core services (without Tempo tracing)
 docker compose up -d
+
+# Start with tracing support (includes Tempo)
+docker compose --profile tracing up -d
+
+# Start all optional components
+docker compose --profile full up -d
 
 # Stop all services
 docker compose down
@@ -682,13 +809,27 @@ docker compose down
 # View logs
 docker compose logs -f
 docker compose logs grafana
-docker compose logs prometheus
+docker compose logs alloy
 
 # Restart specific service
 docker compose restart prometheus
+docker compose restart alloy
 
 # Check health
 docker compose ps
+```
+
+### App CLI Commands (from infra root)
+
+```bash
+# Connect an app with Prometheus metrics
+./scripts/app-cli.sh connect my-api --port 8080 --metrics
+
+# Connect an app with OTEL tracing
+./scripts/app-cli.sh connect my-api --port 8080 --otel
+
+# Show environment variables needed
+./scripts/app-cli.sh connect my-api --otel --show-env
 ```
 
 ---
@@ -699,7 +840,7 @@ docker compose ps
 observability/
 ├── config/
 │   ├── alertmanager.yml        # Alert routing & notifications
-│   ├── alerting-rules/         # Modular alert rules (toggle via .env)
+│   ├── alerting-rules/         # Modular alert rules (auto-synced with services.conf)
 │   │   ├── 01-infrastructure.yml
 │   │   ├── 02-containers.yml
 │   │   ├── 03-observability.yml
@@ -707,13 +848,14 @@ observability/
 │   │   ├── 05-redis.yml
 │   │   ├── 06-nats.yml
 │   │   ├── 07-task-queue.yml
-│   │   └── 08-application.yml
+│   │   └── app-{name}.yml      # Custom app alerts (via app-cli.sh --alerts)
 │   ├── alloy.river             # Alloy unified collector config
 │   ├── grafana-datasources.yaml # Grafana datasource config
 │   ├── loki-config.yaml        # Loki configuration
 │   ├── prometheus.yml          # Prometheus configuration
 │   └── tempo-config.yaml       # Tempo configuration
 ├── targets/
+│   ├── applications.json       # Custom app targets (via app-cli.sh connect)
 │   ├── nats.json               # NATS targets (dynamic)
 │   ├── rabbitmq.json           # RabbitMQ targets
 │   ├── garage.json             # Garage S3 storage targets
@@ -727,18 +869,10 @@ observability/
 ├── dashboards/
 │   ├── logs.json                    # Log search & analysis (Loki)
 │   ├── alertmanager.json            # Active alerts & history
-│   ├── application.json             # HTTP metrics for your apps
-│   ├── backend-api.json             # API performance (OTEL)
-│   ├── backend-dependencies.json    # External APIs, DB, cache
-│   ├── backend-business.json        # Custom business KPIs
-│   ├── backend-runtime.json         # GC, memory, concurrency
-│   ├── monolith-overview.json       # All-in-one app dashboard
-│   ├── security.json                # Fail2ban & Crowdsec dashboard
 │   ├── backup.json                  # Restic backup dashboard
 │   ├── observability-overview.json  # Stack health dashboard
 │   ├── node-exporter.json           # Host metrics dashboard
 │   ├── docker-containers.json       # Container metrics dashboard
-│   ├── task-queue.json              # Asynq/BullMQ dashboard
 │   ├── postgresql.json              # PostgreSQL dashboard
 │   ├── redis.json                   # Redis dashboard
 │   ├── mongodb.json                 # MongoDB dashboard
