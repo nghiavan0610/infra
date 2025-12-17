@@ -525,6 +525,47 @@ remove_from_monitoring() {
 }
 
 # =============================================================================
+# Reload Observability Stack
+# =============================================================================
+# Reloads Prometheus and Grafana to pick up new dashboards/alerts.
+# =============================================================================
+
+reload_observability() {
+    local reload_prometheus=true
+    local reload_grafana=true
+
+    log_header "Reloading Observability Stack"
+
+    # Reload Prometheus
+    if [[ "$reload_prometheus" == "true" ]]; then
+        log_step "Reloading Prometheus..."
+        if curl -s -X POST http://localhost:9090/-/reload >/dev/null 2>&1; then
+            log_info "Prometheus reloaded"
+        else
+            log_warn "Prometheus not running or reload failed"
+        fi
+    fi
+
+    # Reload Grafana dashboards
+    if [[ "$reload_grafana" == "true" ]]; then
+        log_step "Reloading Grafana dashboards..."
+        if curl -s -X POST http://localhost:3000/api/admin/provisioning/dashboards/reload >/dev/null 2>&1; then
+            log_info "Grafana dashboards reloaded"
+        else
+            log_warn "Grafana not running or reload failed"
+        fi
+    fi
+
+    echo ""
+    log_info "Done! Changes should now be visible."
+    echo ""
+    echo "File locations:"
+    echo "  Dashboards: services/observability/dashboards/"
+    echo "  Alerts:     services/observability/config/alerting-rules/"
+    echo ""
+}
+
+# =============================================================================
 # Create Custom Alert Rules for Application
 # =============================================================================
 # Creates a template alert file for the application with common alert patterns.
@@ -721,13 +762,7 @@ cmd_connect() {
         echo "  --show-env             Output env vars for copy/paste"
         echo ""
         echo "Examples:"
-        echo "  # Simple metrics only (app exposes /metrics)"
         echo "  $0 connect myapi --port 8080 --metrics"
-        echo ""
-        echo "  # OTEL tracing only (app uses OpenTelemetry SDK)"
-        echo "  $0 connect myapi --otel"
-        echo ""
-        echo "  # Full setup: metrics, tracing, and custom alerts"
         echo "  $0 connect myapi --port 8080 --metrics --otel --alerts"
         echo ""
         exit 1
@@ -1095,6 +1130,7 @@ Usage:
 Commands:
   connect     Connect existing container to observability
   init        Create .env + docker-compose.yml with database credentials
+  reload      Reload Prometheus & Grafana (after adding dashboards/alerts)
   list        List all registered apps
   remove      Remove an app registration
 
@@ -1103,35 +1139,35 @@ Commands:
 CONNECT - Register existing container with observability
 
   Use this when you already have a running container and want to connect it
-  to monitoring. Supports two approaches:
+  to monitoring.
 
-  1. SIMPLE METRICS (Prometheus)
-     Your app exposes /metrics endpoint in Prometheus format.
-     Prometheus scrapes it automatically.
-
-     ./scripts/app-cli.sh connect myapi --port 8080 --metrics
-
-  2. OTEL TRACING (OpenTelemetry)
-     Your app uses OTEL SDK for distributed tracing.
-     Traces flow: App → Alloy → Tempo → Grafana
-
-     ./scripts/app-cli.sh connect myapi --otel
-
-  3. BOTH (recommended for production APIs)
-     Get both request metrics AND distributed traces.
-
-     ./scripts/app-cli.sh connect myapi --port 8080 --metrics --otel
+  Examples:
+    ./scripts/app-cli.sh connect myapi --port 8080 --metrics
+    ./scripts/app-cli.sh connect myapi --port 8080 --metrics --otel
 
   Options:
     --port <port>          App port (default: 8080)
     --metrics              Enable Prometheus metrics scraping
     --metrics-path <path>  Metrics endpoint (default: /metrics)
     --otel                 Show OTEL tracing setup instructions
+    --alerts               Create template alert rules (for customization)
     --show-env             Output env vars without indentation (copy-paste)
 
   What's automatic:
     ✓ Logging  - Docker stdout/stderr → Loki (no code changes)
-    ✓ Alerting - Based on available metrics
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+RELOAD - Reload Prometheus & Grafana after adding custom files
+
+  After copying your dashboard.json or alerts.yml to the correct directories,
+  run reload to pick up the changes.
+
+    ./scripts/app-cli.sh reload
+
+  File locations:
+    Dashboards: services/observability/dashboards/app-{name}.json
+    Alerts:     services/observability/config/alerting-rules/app-{name}.yml
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -1224,6 +1260,9 @@ main() {
             ;;
         remove|rm)
             cmd_remove "$@"
+            ;;
+        reload)
+            reload_observability
             ;;
         --help|-h|"")
             show_help

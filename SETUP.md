@@ -525,7 +525,13 @@ docker compose up -d
 ### 9.3 Connect to Observability (Optional)
 
 ```bash
-/opt/infra/lib/app-cli.sh connect myapp --port 8080
+# Register app with Prometheus metrics scraping
+/opt/infra/scripts/app-cli.sh connect myapp --port 8080 --metrics
+
+# Add custom dashboard and alerts (copy files first, then reload)
+cp dashboard.json /opt/infra/services/observability/dashboards/app-myapp.json
+cp alerts.yml /opt/infra/services/observability/config/alerting-rules/app-myapp.yml
+/opt/infra/scripts/app-cli.sh reload
 ```
 
 ## Step 10: Setup Domain & SSL (Optional)

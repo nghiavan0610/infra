@@ -574,13 +574,30 @@ OTEL_TRACES_EXPORTER=otlp
 - gRPC: `localhost:4317`
 - HTTP: `localhost:4318`
 
-### Building Custom Dashboards
+### Custom Dashboards & Alerts
 
-Since each application has unique metrics, create custom Grafana dashboards:
+Since each application has unique metrics, create custom Grafana dashboards and Prometheus alerts:
 
-1. Go to Grafana > Dashboards > New Dashboard
-2. Query your app's metrics using the `service` label
-3. Export as JSON and save to `dashboards/` folder for version control
+**1. Create your dashboard in Grafana:**
+- Go to Grafana > Dashboards > New Dashboard
+- Query your app's metrics using the `service` label
+- Export as JSON when finished
+
+**2. Copy files to the correct directories:**
+```bash
+# Dashboard (use app-{name}.json naming convention)
+cp dashboard.json /opt/infra/services/observability/dashboards/app-myapi.json
+
+# Alerts (use app-{name}.yml naming convention)
+cp alerts.yml /opt/infra/services/observability/config/alerting-rules/app-myapi.yml
+```
+
+**3. Reload to apply changes:**
+```bash
+./scripts/app-cli.sh reload
+```
+
+This reloads Prometheus (for alerts) and Grafana (for dashboards) without restarting containers.
 
 **Example query for your app:**
 ```promql
@@ -828,8 +845,14 @@ docker compose ps
 # Connect an app with OTEL tracing
 ./scripts/app-cli.sh connect my-api --port 8080 --otel
 
+# Create template alert rules for customization
+./scripts/app-cli.sh connect my-api --alerts
+
 # Show environment variables needed
 ./scripts/app-cli.sh connect my-api --otel --show-env
+
+# Reload after adding custom dashboards/alerts
+./scripts/app-cli.sh reload
 ```
 
 ---
@@ -887,7 +910,8 @@ observability/
 │   ├── meilisearch.json             # Meilisearch search dashboard
 │   ├── opensearch.json              # OpenSearch cluster dashboard
 │   ├── langfuse.json                # LangFuse LLM observability
-│   └── vault.json                   # HashiCorp Vault dashboard
+│   ├── vault.json                   # HashiCorp Vault dashboard
+│   └── app-{name}.json              # Custom app dashboards (user-created)
 ├── docker-compose.yml
 ├── .env.example
 └── README.md
