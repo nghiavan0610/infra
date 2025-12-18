@@ -512,6 +512,9 @@ EOF
 )
 
     echo "$existing" | jq ". + [$new_target]" > "$targets_file"
+
+    # Ensure Prometheus can read the file (runs as nobody/65534)
+    chmod 644 "$targets_file" 2>/dev/null || true
 }
 
 remove_from_monitoring() {

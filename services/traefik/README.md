@@ -8,6 +8,7 @@ Production-ready Traefik reverse proxy with automatic SSL, security headers, and
 - Docker service auto-discovery via labels
 - Security headers (HSTS, XSS, etc.)
 - Rate limiting (standard, strict, relaxed)
+- Global compression (auto-excludes images, videos, archives)
 - Secure dashboard with authentication
 - Access logging with filtering
 - Prometheus metrics integration
@@ -178,6 +179,45 @@ networks:
     external: true
 ```
 
+## Compression
+
+Global compression is enabled by default on the `websecure` entrypoint. This means all HTTPS traffic is automatically compressed.
+
+### What Gets Compressed
+
+Text-based responses are compressed automatically:
+- HTML, CSS, JavaScript
+- JSON, XML
+- Plain text
+
+### What's Excluded
+
+Already-compressed content types are excluded to avoid double-compression:
+- Images (PNG, JPEG, GIF, WebP, AVIF, SVG)
+- Videos (MP4, WebM)
+- Audio (MPEG, OGG)
+- Archives (ZIP, GZIP, RAR)
+- PDFs and binary files
+
+### Compression Settings
+
+Compression is configured in `config/dynamic/middlewares.yml`:
+- Minimum response size: 1024 bytes (smaller responses are not compressed)
+- Excluded content types listed in `excludedContentTypes`
+
+### Disable Compression for a Route
+
+If you need to disable compression for a specific route (e.g., Server-Sent Events):
+
+```yaml
+labels:
+  - "traefik.http.routers.myapp.middlewares=no-compress@file"
+```
+
+Or remove the compression middleware from your chain.
+
+---
+
 ## Available Middlewares
 
 | Middleware | Description | Usage |
@@ -188,7 +228,7 @@ networks:
 | `rate-limit-strict@file` | 10 req/s rate limit | Login pages |
 | `rate-limit-relaxed@file` | 500 req/s rate limit | Static assets |
 | `ip-whitelist-internal@file` | Private IP only | Internal services |
-| `compress@file` | Gzip compression | All services |
+| `compress@file` | Gzip compression (auto-excludes images/videos) | Already global |
 | `chain-web@file` | Security + rate limit + compress | Web apps |
 | `chain-api@file` | API headers + rate limit + compress | APIs |
 | `chain-internal@file` | IP whitelist + security | Internal |

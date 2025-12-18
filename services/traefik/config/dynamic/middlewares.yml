@@ -95,10 +95,36 @@ http:
     # -------------------------------------------------------------------------
     # Compress Responses
     # -------------------------------------------------------------------------
+    # Traefik automatically handles:
+    # - Checking Accept-Encoding header
+    # - Not re-compressing already compressed content
+    # - Skipping tiny responses
+    # We only need to exclude binary types that don't benefit from compression
     compress:
       compress:
         excludedContentTypes:
+          # Streaming (breaks chunked transfer)
           - "text/event-stream"
+          # Already compressed images
+          - "image/png"
+          - "image/jpeg"
+          - "image/gif"
+          - "image/webp"
+          - "image/avif"
+          - "image/svg+xml"  # SVG can be compressed, but often small
+          # Already compressed media
+          - "video/mp4"
+          - "video/webm"
+          - "audio/mpeg"
+          - "audio/ogg"
+          # Binary/compressed files
+          - "application/zip"
+          - "application/gzip"
+          - "application/x-rar-compressed"
+          - "application/pdf"
+          - "application/octet-stream"
+        # Minimum size to compress (bytes) - skip tiny responses
+        minResponseBodyBytes: 1024
 
     # -------------------------------------------------------------------------
     # Redirect www to non-www

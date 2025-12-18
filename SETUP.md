@@ -348,12 +348,14 @@ sudo bash scripts/add-user.sh
 | **1) Developer** | ✅ | ❌ | ❌ | App deployment only |
 | **2) DevOps** | ✅ | ✅ | ❌ | System management (NO Docker) |
 | **3) Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
+| **4) Tunnel Only** | tunnel | ❌ | ❌ | DB access from local (no shell) |
 
 **Important Security Notes:**
 
 - **Developer**: Can SSH and deploy apps, but cannot access databases or containers directly
 - **DevOps**: Can manage system (packages, firewall, etc.) but CANNOT control Docker containers
 - **Infra Admin**: Full access - only grant to trusted administrators
+- **Tunnel Only**: Can only create SSH tunnels, cannot execute any commands on the server
 
 ```bash
 # Example: Add a developer
@@ -366,9 +368,51 @@ sudo bash scripts/add-user.sh
 sudo bash scripts/add-user.sh
 # Select: 3) Infra Admin
 # Type "yes" to confirm
+
+# Example: Add a tunnel-only user for dev partner
+sudo bash scripts/add-user.sh
+# Select: 4) Tunnel Only
+# Enter username and paste SSH key
 ```
 
-### 6.4 Remove Docker Access from User
+### 6.4 Dev Partner Access (SSH Tunnel)
+
+Allow dev partners to access production databases from their local machine:
+
+```bash
+# 1. Add tunnel-only user (on server)
+sudo bash scripts/add-user.sh
+# Select: 4) Tunnel Only
+# Enter username (e.g., dev-partner)
+# Paste their SSH public key
+```
+
+**Dev partner runs on their local machine:**
+
+```bash
+# Create SSH tunnel
+ssh -N -p 2222 \
+    -L 5432:localhost:5432 \
+    -L 6379:localhost:6379 \
+    -L 6380:localhost:6380 \
+    dev-partner@your-server-ip
+
+# In another terminal, connect to services
+psql -h localhost -p 5432 -U postgres
+redis-cli -h localhost -p 6379
+```
+
+**What tunnel-only users can do:**
+- Create SSH tunnels to PostgreSQL, Redis, etc.
+- Connect to databases from their local machine
+
+**What tunnel-only users CANNOT do:**
+- Execute any commands on the server
+- Get a shell session
+- Access files on the server
+- Control Docker containers
+
+### 6.5 Remove Docker Access from User
 
 If you need to downgrade a user's access:
 

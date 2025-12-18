@@ -580,7 +580,7 @@ Since each application has unique metrics, create custom Grafana dashboards and 
 
 **1. Create your dashboard in Grafana:**
 - Go to Grafana > Dashboards > New Dashboard
-- Query your app's metrics using the `service` label
+- Query your app's metrics using the `app` label (for Prometheus) or `compose_project` (for Loki)
 - Export as JSON when finished
 
 **2. Copy files to the correct directories:**
@@ -599,10 +599,31 @@ cp alerts.yml /opt/infra/services/observability/config/alerting-rules/app-myapi.
 
 This reloads Prometheus (for alerts) and Grafana (for dashboards) without restarting containers.
 
-**Example query for your app:**
+**Example Prometheus queries:**
 ```promql
-rate(http_requests_total{service="my-api"}[5m])
+# Services up (using app label)
+up{app=~"myapi.*"}
+
+# Request rate
+rate(http_requests_total{app=~"myapi.*"}[5m])
 ```
+
+**Example Loki queries:**
+```logql
+# All logs for your app
+{compose_project="myapi"}
+
+# Error logs only
+{compose_project="myapi"} |= "error" | json
+
+# Logs from specific service
+{compose_project="myapi", compose_service="api"}
+```
+
+**Important Notes:**
+- Use `app=~"myapi.*"` pattern to match all services in your application
+- Use `compose_project="myapi"` for Loki logs (auto-detected from Docker Compose)
+- Avoid using container names directly as they may change
 
 ### Manual Target Registration
 
@@ -613,11 +634,33 @@ You can also manually add targets to `targets/applications.json`:
   {
     "targets": ["host.docker.internal:8080"],
     "labels": {
-      "service": "my-api",
+      "app": "my-api",
       "env": "production"
     }
   }
 ]
+```
+
+### Production-Ready Labels
+
+When connecting your app, use these labels for production-ready dashboards and alerts:
+
+**For Prometheus metrics:**
+- `app` - Application name (e.g., `hirestack-api-1`)
+- `job` - Job name (defaults to `applications`)
+
+**For Loki logs:**
+- `compose_project` - Docker Compose project name (auto-detected)
+- `compose_service` - Service name within the project
+
+**Example Loki query:**
+```logql
+{compose_project="hirestack"} |= "error"
+```
+
+**Example Prometheus query:**
+```promql
+up{app=~"hirestack.*"}
 ```
 
 ---

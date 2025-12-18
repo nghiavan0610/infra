@@ -621,6 +621,7 @@ sudo bash scripts/add-user.sh
 | **Developer** | ✅ | ❌ | ❌ | Application deployment only |
 | **DevOps** | ✅ | ✅ | ❌ | System management (no container control) |
 | **Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
+| **Tunnel Only** | tunnel | ❌ | ❌ | DB access from local (no shell) |
 
 **Important:** Only grant "Infra Admin" to trusted administrators. Users with Docker access can:
 - Start/stop/remove ANY container
@@ -710,6 +711,37 @@ sudo bash scripts/audit-access.sh
 # 6. Run production checklist before going live
 bash scripts/production-checklist.sh
 ```
+
+### Dev Partner Access (SSH Tunnel)
+
+Allow dev partners to access production databases from their local machine without shell access:
+
+```bash
+# 1. Add tunnel-only user
+sudo bash scripts/add-user.sh
+# Select: 4) Tunnel Only
+# Enter username and SSH public key
+
+# 2. Dev partner creates tunnel from their local machine
+ssh -N -p 2222 \
+    -L 5432:localhost:5432 \
+    -L 6379:localhost:6379 \
+    -L 6380:localhost:6380 \
+    dev-partner@your-server-ip
+
+# 3. Dev partner connects to services locally
+psql -h localhost -p 5432 -U postgres
+redis-cli -h localhost -p 6379
+```
+
+**What tunnel-only users can do:**
+- Create SSH tunnels to access PostgreSQL, Redis, etc.
+- Connect to databases from their local machine
+
+**What tunnel-only users CANNOT do:**
+- Execute any commands on the server
+- Get a shell session
+- Access files on the server
 
 ## Production Readiness
 

@@ -1025,6 +1025,10 @@ EOF
     # Summary & Restart
     # =========================================================================
 
+    # Fix permissions for Prometheus (runs as nobody/65534)
+    chmod 755 "$SCRIPT_DIR/services/observability/targets" 2>/dev/null || true
+    chmod 644 "$SCRIPT_DIR/services/observability/targets"/*.json 2>/dev/null || true
+
     log_info "Monitoring configuration complete"
 
     # Restart Alloy to pick up new configuration

@@ -112,3 +112,5 @@ PERFORMANCE_OPTIMIZATION_README.md
 *.p12
 *.jks
 *.pub
+
+domains

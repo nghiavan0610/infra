@@ -273,12 +273,43 @@ Cache doesn't need backups - data is volatile and can be regenerated.
 
 Edit `config/redis-cache.conf` or `config/redis-queue.conf`:
 
+**Single-App Server (Redis is primary workload):**
+
 | VPS RAM | Cache maxmemory | Queue maxmemory |
 |---------|-----------------|-----------------|
 | 2GB | 256mb | 256mb |
 | 4GB | 512mb | 512mb |
 | 8GB | 1gb | 1gb |
 | 16GB+ | 2-4gb | 2-4gb |
+
+**Multi-App Server (Redis + PostgreSQL + Apps + Workers):**
+
+For servers running multiple services, use conservative settings to leave room for other workloads:
+
+| VPS RAM | Cache maxmemory | Queue maxmemory | Notes |
+|---------|-----------------|-----------------|-------|
+| 4GB | 256mb | 256mb | Very conservative |
+| 8GB | 512mb | 512mb | Recommended |
+| 10GB | 512mb | 512mb | Default config |
+| 16GB+ | 1gb | 1gb | Room for growth |
+
+**Example for 10GB RAM multi-app server:**
+```conf
+# config/redis-cache.conf and config/redis-queue.conf
+maxmemory 512mb
+```
+
+**Container limits (docker-compose.yml):**
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '1'
+      memory: 768M    # maxmemory (512mb) + overhead
+    reservations:
+      cpus: '0.25'
+      memory: 128M
+```
 
 ### Resource Limits
 
@@ -291,6 +322,19 @@ deploy:
       cpus: '2'      # Adjust based on VPS
       memory: 1G     # maxmemory + ~50% overhead
 ```
+
+### Multi-App Server Memory Allocation Example
+
+For a 10GB RAM server running PostgreSQL, Redis, observability, and multiple app workers:
+
+| Service | Memory Limit | Notes |
+|---------|--------------|-------|
+| PostgreSQL | 2GB | shared_buffers 1.5GB |
+| Redis Cache | 768MB | maxmemory 512MB |
+| Redis Queue | 768MB | maxmemory 512MB |
+| Observability | ~2GB | Prometheus, Grafana, Loki |
+| App Workers | 2-3GB | Your application |
+| OS/Overhead | ~1GB | System processes |
 
 ---
 

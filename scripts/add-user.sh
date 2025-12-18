@@ -46,23 +46,27 @@ echo -e "${CYAN}User Types:${NC}"
 echo "  1) Developer   - SSH access only (application deployment)"
 echo "  2) DevOps      - SSH + sudo (system management, NO docker)"
 echo "  3) Infra Admin - SSH + sudo + docker (full infrastructure control)"
+echo "  4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)"
 echo ""
-read -p "Select user type [1-3]: " USER_TYPE
+read -p "Select user type [1-4]: " USER_TYPE
 
 case "$USER_TYPE" in
     1)
         GRANT_SUDO="n"
         GRANT_DOCKER="n"
+        TUNNEL_ONLY="n"
         USER_TYPE_NAME="Developer"
         ;;
     2)
         GRANT_SUDO="y"
         GRANT_DOCKER="n"
+        TUNNEL_ONLY="n"
         USER_TYPE_NAME="DevOps"
         ;;
     3)
         GRANT_SUDO="y"
         GRANT_DOCKER="y"
+        TUNNEL_ONLY="n"
         USER_TYPE_NAME="Infra Admin"
         echo ""
         log_warn "INFRA ADMIN WARNING:"
@@ -76,8 +80,20 @@ case "$USER_TYPE" in
             exit 0
         fi
         ;;
+    4)
+        GRANT_SUDO="n"
+        GRANT_DOCKER="n"
+        TUNNEL_ONLY="y"
+        USER_TYPE_NAME="Tunnel Only"
+        echo ""
+        log_info "TUNNEL ONLY USER:"
+        echo "  This user can ONLY create SSH tunnels to access services."
+        echo "  They cannot execute any commands on the server."
+        echo "  Perfect for dev partners who need DB/Redis access from local."
+        echo ""
+        ;;
     *)
-        log_error "Invalid option. Choose 1, 2, or 3"
+        log_error "Invalid option. Choose 1, 2, 3, or 4"
         exit 1
         ;;
 esac
@@ -141,11 +157,21 @@ fi
 #######################################
 if [[ "$USER_EXISTS" == "false" ]]; then
     log_step "Creating user: $USERNAME"
-    useradd -m -s /bin/bash "$USERNAME"
-    echo "$USERNAME:$PASSWORD" | chpasswd
-    log_info "User $USERNAME created"
+    if [[ "$TUNNEL_ONLY" == "y" ]]; then
+        # Tunnel-only user gets nologin shell
+        useradd -m -s /usr/sbin/nologin "$USERNAME"
+        log_info "User $USERNAME created (tunnel-only, no shell)"
+    else
+        useradd -m -s /bin/bash "$USERNAME"
+        echo "$USERNAME:$PASSWORD" | chpasswd
+        log_info "User $USERNAME created"
+    fi
 else
     log_step "Updating existing user: $USERNAME"
+    if [[ "$TUNNEL_ONLY" == "y" ]]; then
+        usermod -s /usr/sbin/nologin "$USERNAME"
+        log_info "Shell changed to nologin (tunnel-only)"
+    fi
 fi
 
 #######################################
@@ -215,6 +241,43 @@ if [[ -n "$SSH_PUBLIC_KEY" ]]; then
 fi
 
 #######################################
+# Configure SSH restrictions for tunnel-only users
+#######################################
+if [[ "$TUNNEL_ONLY" == "y" ]]; then
+    log_step "Configuring SSH tunnel-only restrictions"
+
+    SSHD_CONFIG="/etc/ssh/sshd_config"
+    MATCH_BLOCK="Match User $USERNAME"
+
+    # Check if Match block already exists
+    if grep -q "^Match User $USERNAME" "$SSHD_CONFIG" 2>/dev/null; then
+        log_warn "SSH Match block for $USERNAME already exists, skipping"
+    else
+        # Add Match block for tunnel-only user
+        cat >> "$SSHD_CONFIG" << EOF
+
+# Tunnel-only user: $USERNAME (added by add-user.sh)
+Match User $USERNAME
+    AllowTcpForwarding yes
+    X11Forwarding no
+    AllowAgentForwarding no
+    PermitTTY no
+    ForceCommand /bin/false
+EOF
+        log_info "SSH tunnel-only restrictions configured"
+
+        # Reload SSH
+        if systemctl is-active --quiet sshd; then
+            systemctl reload sshd
+            log_info "SSH service reloaded"
+        elif systemctl is-active --quiet ssh; then
+            systemctl reload ssh
+            log_info "SSH service reloaded"
+        fi
+    fi
+fi
+
+#######################################
 # Display summary
 #######################################
 echo ""
@@ -247,36 +310,61 @@ fi
 echo ""
 
 # Show connection command
-SSH_PORT=$(grep -E "^Port " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | awk '{print $2}' || echo "22")
+SSH_PORT=$(grep -E "^Port " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | awk '{print $2}' || grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "22")
 HOSTNAME=$(hostname -I | awk '{print $1}')
 
-log_info "User can now connect with:"
-echo "  ssh -p $SSH_PORT $USERNAME@$HOSTNAME"
-echo ""
+if [[ "$TUNNEL_ONLY" == "y" ]]; then
+    log_info "Dev partner can create SSH tunnel with:"
+    echo ""
+    echo "  # Create tunnel (run on local machine)"
+    echo "  ssh -N -p $SSH_PORT \\"
+    echo "      -L 5432:localhost:5432 \\"
+    echo "      -L 6379:localhost:6379 \\"
+    echo "      -L 6380:localhost:6380 \\"
+    echo "      $USERNAME@$HOSTNAME"
+    echo ""
+    echo "  # Then connect to services locally:"
+    echo "  psql -h localhost -p 5432 -U postgres"
+    echo "  redis-cli -h localhost -p 6379"
+    echo ""
+    echo -e "${CYAN}What $USERNAME can do:${NC}"
+    echo "  - Create SSH tunnels to access PostgreSQL, Redis, etc."
+    echo "  - Connect to databases from their local machine"
+    echo ""
+    echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
+    echo "  - Execute ANY commands on the server"
+    echo "  - Get a shell session"
+    echo "  - Access files on the server"
+    echo "  - Control Docker containers"
+else
+    log_info "User can now connect with:"
+    echo "  ssh -p $SSH_PORT $USERNAME@$HOSTNAME"
+    echo ""
 
-# Show what user CAN and CANNOT do
-echo -e "${CYAN}What $USERNAME can do:${NC}"
-echo "  - SSH into the server"
-if [[ "$GRANT_SUDO" == "y" ]]; then
-    echo "  - Run system commands with sudo"
-    echo "  - Manage system packages, services, firewall"
-fi
-if [[ "$GRANT_DOCKER" == "y" ]]; then
-    echo "  - Start/stop/remove Docker containers"
-    echo "  - Access all infrastructure services"
-    echo "  - Run management scripts in /opt/infra"
-fi
+    # Show what user CAN and CANNOT do
+    echo -e "${CYAN}What $USERNAME can do:${NC}"
+    echo "  - SSH into the server"
+    if [[ "$GRANT_SUDO" == "y" ]]; then
+        echo "  - Run system commands with sudo"
+        echo "  - Manage system packages, services, firewall"
+    fi
+    if [[ "$GRANT_DOCKER" == "y" ]]; then
+        echo "  - Start/stop/remove Docker containers"
+        echo "  - Access all infrastructure services"
+        echo "  - Run management scripts in /opt/infra"
+    fi
 
-echo ""
-echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
-if [[ "$GRANT_DOCKER" != "y" ]]; then
-    echo "  - Control Docker containers (docker ps, docker stop, etc.)"
-    echo "  - Access infrastructure management scripts"
-fi
-if [[ "$GRANT_SUDO" != "y" ]]; then
-    echo "  - Run commands as root"
-    echo "  - Install system packages"
-    echo "  - Modify system configuration"
+    echo ""
+    echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
+    if [[ "$GRANT_DOCKER" != "y" ]]; then
+        echo "  - Control Docker containers (docker ps, docker stop, etc.)"
+        echo "  - Access infrastructure management scripts"
+    fi
+    if [[ "$GRANT_SUDO" != "y" ]]; then
+        echo "  - Run commands as root"
+        echo "  - Install system packages"
+        echo "  - Modify system configuration"
+    fi
 fi
 
 echo ""

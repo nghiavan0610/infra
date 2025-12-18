@@ -46,6 +46,7 @@ entryPoints:
         certResolver: letsencrypt
       middlewares:
         - security-headers@file
+        - compress@file
     # Trusted proxies for X-Forwarded-* headers (Cloudflare IPs)
     forwardedHeaders:
       trustedIPs:

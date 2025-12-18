@@ -10,7 +10,9 @@ Use `add-user.sh` to:
 - ✅ Add new dev team members
 - ✅ Update SSH keys for existing users
 - ✅ Grant/manage sudo access
+- ✅ Grant/manage Docker access
 - ✅ Set up SSH key authentication
+- ✅ Create tunnel-only users for dev partners
 
 **DO NOT use for:** Initial VPS setup (use `vps-initial-setup.sh` instead)
 
@@ -43,31 +45,49 @@ sudo bash add-user.sh
 
 ---
 
+## User Types
+
+The script offers 4 user types:
+
+| Type | SSH | Sudo | Docker | Use Case |
+|------|-----|------|--------|----------|
+| **1) Developer** | ✅ | ❌ | ❌ | App deployment only |
+| **2) DevOps** | ✅ | ✅ | ❌ | System management (NO Docker) |
+| **3) Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
+| **4) Tunnel Only** | tunnel | ❌ | ❌ | DB access from local (no shell) |
+
+---
+
 ## Interactive Prompts
 
 The script will ask:
 
-### 1. Username
+### 1. User Type
+```
+User Types:
+  1) Developer   - SSH access only (application deployment)
+  2) DevOps      - SSH + sudo (system management, NO docker)
+  3) Infra Admin - SSH + sudo + docker (full infrastructure control)
+  4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)
+
+Select user type [1-4]: 1
+```
+
+### 2. Username
 ```
 Enter username for new team member: alice
 ```
 - Use lowercase letters, numbers, underscore, hyphen
 - Example: `alice`, `bob_dev`, `charlie-admin`
 
-### 2. Password (new users only)
+### 3. Password (new users only, not for tunnel-only)
 ```
 Enter password for alice: ********
 Confirm password: ********
 ```
 - Choose a strong password
 - User can change it later with: `passwd`
-
-### 3. Sudo Access
-```
-Grant sudo privileges to alice? (y/n): y
-```
-- `y` = User can run commands with `sudo`
-- `n` = Regular user (no admin access)
+- Tunnel-only users don't need passwords (SSH key only)
 
 ### 4. SSH Public Key
 ```
@@ -81,7 +101,7 @@ ssh-rsa AAAAB3NzaC1yc2EAAAA...
 
 ## Example Usage
 
-### Example 1: Add Developer with Sudo
+### Example 1: Add Developer
 
 ```bash
 $ sudo bash add-user.sh
@@ -90,17 +110,23 @@ $ sudo bash add-user.sh
   Add New User - Dev Team Management
 ==========================================
 
+User Types:
+  1) Developer   - SSH access only (application deployment)
+  2) DevOps      - SSH + sudo (system management, NO docker)
+  3) Infra Admin - SSH + sudo + docker (full infrastructure control)
+  4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)
+
+Select user type [1-4]: 1
+
 Enter username for new team member: alice
 Enter password for alice: ********
 Confirm password: ********
-Grant sudo privileges to alice? (y/n): y
 
 Please provide SSH public key for alice
 Paste the SSH public key (press Enter when done):
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJx... alice@laptop
 
 [INFO] User alice created
-[INFO] Sudo privileges granted
 [INFO] SSH key configured
 
 ==========================================
@@ -109,8 +135,10 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIJx... alice@laptop
 
 User Information:
   - Username: alice
+  - Type: Developer
   - Home directory: /home/alice
-  - Sudo access: YES
+  - Sudo access: NO
+  - Docker access: NO
   - SSH key: CONFIGURED
 
 [INFO] User can now connect with:
@@ -119,32 +147,108 @@ User Information:
 ==========================================
 ```
 
-### Example 2: Add Regular User (No Sudo)
+### Example 2: Add DevOps User
 
 ```bash
 $ sudo bash add-user.sh
 
+Select user type [1-4]: 2
+
 Enter username for new team member: bob
 Enter password for bob: ********
 Confirm password: ********
-Grant sudo privileges to bob? (y/n): n
 
 Paste the SSH public key (press Enter when done):
 ssh-rsa AAAAB3NzaC1yc2EAAAA... bob@laptop
 
 [INFO] User bob created
+[INFO] Sudo privileges granted
 [INFO] SSH key configured
 
 User Information:
   - Username: bob
-  - Sudo access: NO
+  - Type: DevOps
+  - Sudo access: YES
+  - Docker access: NO
   - SSH key: CONFIGURED
 
 [INFO] User can now connect with:
   ssh -p 2222 bob@YOUR_VPS_IP
+
+What bob can do:
+  - SSH into the server
+  - Run system commands with sudo
+  - Manage system packages, services, firewall
+
+What bob CANNOT do:
+  - Control Docker containers (docker ps, docker stop, etc.)
+  - Access infrastructure management scripts
 ```
 
-### Example 3: Update SSH Key for Existing User
+### Example 3: Add Tunnel-Only User (Dev Partner)
+
+```bash
+$ sudo bash add-user.sh
+
+Select user type [1-4]: 4
+
+TUNNEL ONLY USER:
+  This user can ONLY create SSH tunnels to access services.
+  They cannot execute any commands on the server.
+  Perfect for dev partners who need DB/Redis access from local.
+
+Enter username for new team member: dev-partner
+
+Please provide SSH public key for dev-partner
+Paste the SSH public key (press Enter when done):
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINew... partner@laptop
+
+[INFO] User dev-partner created (tunnel-only, no shell)
+[INFO] SSH tunnel-only restrictions configured
+[INFO] SSH service reloaded
+[INFO] SSH key configured
+
+==========================================
+[INFO] User Setup Complete!
+==========================================
+
+User Information:
+  - Username: dev-partner
+  - Type: Tunnel Only
+  - Home directory: /home/dev-partner
+
+Permissions:
+  - Sudo access: NO
+  - Docker access: NO
+  - SSH key: CONFIGURED
+
+[INFO] Dev partner can create SSH tunnel with:
+
+  # Create tunnel (run on local machine)
+  ssh -N -p 2222 \
+      -L 5432:localhost:5432 \
+      -L 6379:localhost:6379 \
+      -L 6380:localhost:6380 \
+      dev-partner@YOUR_VPS_IP
+
+  # Then connect to services locally:
+  psql -h localhost -p 5432 -U postgres
+  redis-cli -h localhost -p 6379
+
+What dev-partner can do:
+  - Create SSH tunnels to access PostgreSQL, Redis, etc.
+  - Connect to databases from their local machine
+
+What dev-partner CANNOT do:
+  - Execute ANY commands on the server
+  - Get a shell session
+  - Access files on the server
+  - Control Docker containers
+
+==========================================
+```
+
+### Example 4: Update SSH Key for Existing User
 
 ```bash
 $ sudo bash add-user.sh
@@ -167,21 +271,27 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINew... alice@new-laptop
 ## What This Script Does
 
 ✅ **For New Users:**
-1. Creates user account
-2. Sets password
-3. Grants sudo access (if requested)
-4. Adds SSH public key
-5. Sets correct file permissions
+1. Creates user account with appropriate shell
+2. Sets password (except for tunnel-only users)
+3. Grants sudo access (for DevOps and Infra Admin)
+4. Grants Docker access (for Infra Admin only)
+5. Adds SSH public key
+6. Sets correct file permissions
+7. Configures SSH restrictions for tunnel-only users
 
 ✅ **For Existing Users:**
 1. Optionally updates SSH key
-2. Grants/confirms sudo access (if requested)
+2. Updates sudo/Docker access based on new user type
 3. Appends new key to authorized_keys (doesn't overwrite)
 
+✅ **For Tunnel-Only Users:**
+1. Creates user with `/usr/sbin/nologin` shell
+2. Configures SSH Match block for tunnel-only restrictions
+3. Reloads SSH service automatically
+
 ❌ **What It Does NOT Do:**
-- Modify system-wide SSH config
+- Modify system-wide SSH config (except for tunnel-only Match blocks)
 - Change firewall rules
-- Restart services
 - Modify system limits
 
 ---
@@ -209,10 +319,12 @@ They send you the **public key only** (starts with `ssh-ed25519` or `ssh-rsa`)
 openssl rand -base64 16
 ```
 
-### 3. Grant Sudo Sparingly
+### 3. Grant Access Sparingly
 
-- Dev/QA environments: OK to give sudo
-- Production: Only to admins, not all developers
+- **Docker access**: Only grant to trusted Infra Admins (can control all containers)
+- **Sudo access**: Only for DevOps and Infra Admins
+- **Tunnel-only**: Prefer for dev partners who just need database access
+- **Developer**: For team members who only need to deploy apps
 
 ### 4. Regular Audits
 
@@ -420,5 +532,5 @@ After adding users, consider:
 
 ---
 
-**Last Updated:** 2025-11-22
-**Version:** 1.0.0
+**Last Updated:** 2025-12-18
+**Version:** 2.0.0

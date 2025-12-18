@@ -42,16 +42,16 @@ services:
       - ./init-scripts:/docker-entrypoint-initdb.d:ro
 
     # ---------------------------------------------
-    # Resource Limits (Adjust based on VPS)
+    # Resource Limits (Conservative for multi-app 10GB server)
     # ---------------------------------------------
     deploy:
       resources:
         limits:
-          cpus: "2" # Max 2 CPU cores
-          memory: 2G # Max 2GB RAM
+          cpus: "2"
+          memory: 2G    # shared_buffers (1.5GB) + overhead
         reservations:
-          cpus: "0.5" # Reserved 0.5 CPU
-          memory: 512M # Reserved 512MB RAM
+          cpus: "0.25"
+          memory: 512M
 
     # ---------------------------------------------
     # Health Check

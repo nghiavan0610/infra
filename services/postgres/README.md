@@ -94,12 +94,60 @@ postgres-single/
 
 Adjust in `config/postgresql.conf` based on your VPS:
 
+**Single-App Server (PostgreSQL is primary workload):**
+
 | VPS Size | RAM | shared_buffers | effective_cache_size | work_mem |
 |----------|-----|----------------|---------------------|----------|
 | Small    | 2GB | 512MB          | 1.5GB               | 4MB      |
 | Medium   | 4-8GB | 1GB          | 3GB                 | 8MB      |
 | Large    | 16GB | 4GB           | 12GB                | 16MB     |
 | XLarge   | 32GB+ | 8GB          | 24GB                | 32MB     |
+
+**Multi-App Server (PostgreSQL + Redis + Apps + Workers):**
+
+For servers running multiple services, use conservative settings:
+
+| VPS RAM | shared_buffers | effective_cache_size | work_mem | maintenance_work_mem |
+|---------|----------------|---------------------|----------|---------------------|
+| 4GB | 512MB | 1.5GB | 4MB | 128MB |
+| 8GB | 1GB | 3GB | 8MB | 256MB |
+| 10GB | 1.5GB | 4GB | 8MB | 256MB |
+| 16GB+ | 2GB | 6GB | 16MB | 512MB |
+
+**Example for 10GB RAM multi-app server:**
+```conf
+# config/postgresql.conf
+# Conservative for multi-app server (10GB RAM)
+shared_buffers = 1536MB          # ~1.5GB
+effective_cache_size = 4096MB    # ~4GB
+work_mem = 8MB
+maintenance_work_mem = 256MB
+```
+
+**Container limits (docker-compose.yml):**
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: "2"
+      memory: 2G    # shared_buffers (1.5GB) + overhead
+    reservations:
+      cpus: "0.25"
+      memory: 512M
+```
+
+### Multi-App Server Memory Allocation Example
+
+For a 10GB RAM server running PostgreSQL, Redis, observability, and app workers:
+
+| Service | Memory Limit | Notes |
+|---------|--------------|-------|
+| PostgreSQL | 2GB | shared_buffers 1.5GB + overhead |
+| Redis Cache | 768MB | maxmemory 512MB |
+| Redis Queue | 768MB | maxmemory 512MB |
+| Observability | ~2GB | Prometheus, Grafana, Loki |
+| App Workers | 2-3GB | Your application |
+| OS/Overhead | ~1GB | System processes |
 
 ### Resource Limits
 
