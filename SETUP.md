@@ -5,25 +5,27 @@ Complete step-by-step guide for setting up infrastructure on a fresh VPS.
 ## Quick Start (Experienced Users)
 
 ```bash
-# 1. SSH to fresh VPS as root
-ssh root@your-server-ip
+# 1. SSH to fresh VPS (as opc on Oracle Cloud, or root on others)
+ssh opc@your-server-ip
 
 # 2. Setup GitHub SSH key (see Step 0 below), then clone
 sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
 git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
-bash scripts/vps-initial-setup.sh
 
-# 3. In NEW terminal, login as new user
-ssh -p 2222 deploy@your-server-ip
+# 3. Harden the system (SSH port, firewall, fail2ban)
+sudo bash scripts/vps-initial-setup.sh
+
+# 4. In NEW terminal, test SSH with new port
+ssh -p 2222 opc@your-server-ip
 cd /opt/infra
 
-# 4. Install Docker
+# 5. Install Docker (adds current user to docker group)
 bash scripts/docker-install.sh
 exit  # Logout to apply docker group
 
-# 5. Login again and start services
-ssh -p 2222 deploy@your-server-ip
+# 6. Login again and start services
+ssh -p 2222 opc@your-server-ip
 cd /opt/infra
 ./test.sh                    # Validate
 nano services.conf           # Enable services
@@ -31,12 +33,10 @@ nano services.conf           # Enable services
 ./setup.sh                   # Start services
 ./status.sh                  # Verify
 
-# 6. Secure the infrastructure
+# 7. Secure and add users
 ./secure.sh                              # Secure file permissions
+sudo bash scripts/add-user.sh            # Create Infra Admin (type 3)
 sudo bash scripts/audit-access.sh        # Check who has access
-
-# 7. Add team members (optional)
-sudo bash scripts/add-user.sh            # Add users with appropriate access
 ```
 
 ---
@@ -83,105 +83,102 @@ ssh -T git@github.com
 # Should see: "Hi nghiavan0610! You've successfully authenticated..."
 ```
 
-## Step 1: Initial Server Setup
+## Step 1: Initial Server Setup (System Hardening)
 
 ### 1.1 Login to Your VPS
 
 ```bash
+# Oracle Cloud uses 'opc' user
+ssh opc@your-server-ip
+
+# Other providers may use 'root' or another default user
 ssh root@your-server-ip
 ```
 
-### 1.2 Download and Run VPS Setup Script
+### 1.2 Clone Repository and Run VPS Setup Script
 
 ```bash
-# Download the script
-curl -fsSL https://raw.githubusercontent.com/nghiavan0610/infra/main/scripts/vps-initial-setup.sh -o vps-initial-setup.sh
-
-# Or clone the repo first
+# Clone the repo
 sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
 git clone git@github.com:nghiavan0610/infra.git /opt/infra
 cd /opt/infra
 
-# Run the VPS setup script
-bash scripts/vps-initial-setup.sh
+# Run the VPS setup script (system hardening only)
+sudo bash scripts/vps-initial-setup.sh
 ```
 
 ### 1.3 What the Script Does
 
 The script will prompt you for:
-- **Username**: New sudo user (e.g., `deploy`)
-- **Password**: Password for the new user
 - **SSH Port**: Custom SSH port (default: 2222, recommended for security)
-- **SSH Public Key**: Your public key for key-based authentication
+- **SSH Key**: Option to add/update SSH key for current user
+- **Root Login**: Whether to disable root SSH login
 
 The script automatically configures:
-- Creates non-root user with sudo privileges
-- SSH hardening (disables root login, custom port)
-- Key-based authentication (if SSH key provided)
-- Firewall (UFW or firewalld)
+- SSH hardening (custom port, security settings)
+- Firewall (UFW or firewalld) with ports 80, 443, SSH
 - Fail2ban for brute-force protection
 - Automatic security updates
 - System limits optimized for production
 - Timezone set to UTC
+- Helpful shell aliases
+
+**Note**: User creation is handled separately by `add-user.sh` after Docker is installed.
 
 ### 1.4 After Script Completes
 
-**IMPORTANT**: Test SSH in a NEW terminal before closing the root session!
+**IMPORTANT**: Test SSH in a NEW terminal before closing the current session!
 
 ```bash
-# In a NEW terminal, test the new connection
-ssh -p 2222 deploy@your-server-ip
+# In a NEW terminal, test the new connection with new port
+ssh -p 2222 opc@your-server-ip
 
 # Verify sudo works
 sudo whoami
 ```
 
-Only close the root terminal after confirming the new user can connect and use sudo.
+Only close the original terminal after confirming you can connect with the new SSH port.
 
 ## Step 2: Install Docker
 
-### 2.1 Login as Deploy User
+### 2.1 Login with New SSH Port
 
 ```bash
 # Use the SSH port you configured (default: 2222)
-ssh -p 2222 deploy@your-server-ip
-```
-
-### 2.2 Clone Infrastructure Repository (if not already done)
-
-```bash
-# Skip if you already cloned in Step 1
-sudo mkdir -p /opt/infra && sudo chown $USER:$USER /opt/infra
-git clone git@github.com:nghiavan0610/infra.git /opt/infra
+ssh -p 2222 opc@your-server-ip
 cd /opt/infra
 ```
 
-### 2.3 Run Docker Install Script
+### 2.2 Run Docker Install Script
 
 ```bash
 bash scripts/docker-install.sh
 ```
 
-### 2.4 Add User to Docker Group
+The script automatically:
+- Installs Docker CE and Docker Compose plugin
+- Configures Docker daemon for production
+- Adds current user to `docker` group
+
+### 2.3 Logout and Login Again
 
 ```bash
-sudo usermod -aG docker $USER
-
-# IMPORTANT: Logout and login again
+# IMPORTANT: Logout to apply docker group
 exit
+
+# Login again
+ssh -p 2222 opc@your-server-ip
+cd /opt/infra
 ```
 
-### 2.5 Verify Installation
+### 2.4 Verify Installation
 
 ```bash
-ssh deploy@your-server-ip
-cd /opt/infra
-
 # Check versions
 docker --version
 docker compose version
 
-# Test docker works
+# Test docker works (no sudo needed!)
 docker run --rm hello-world
 ```
 
@@ -799,11 +796,12 @@ docker system prune -a --volumes
 
 ### Server Security
 
-- [ ] Non-root user created (`vps-initial-setup.sh`)
-- [ ] SSH key authentication only
+- [ ] SSH hardened (`vps-initial-setup.sh`)
 - [ ] Custom SSH port (not 22)
+- [ ] SSH key authentication only
+- [ ] Root login disabled
 - [ ] Firewall enabled (ufw/firewalld)
-- [ ] Fail2ban or Crowdsec enabled
+- [ ] Fail2ban enabled
 - [ ] Auto security updates enabled
 
 ### Infrastructure Security

@@ -47,26 +47,30 @@ echo "  1) Developer   - SSH access only (application deployment)"
 echo "  2) DevOps      - SSH + sudo (system management, NO docker)"
 echo "  3) Infra Admin - SSH + sudo + docker (full infrastructure control)"
 echo "  4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)"
+echo "  5) CI Runner   - Docker + apps access (for gitlab-runner service, no SSH)"
 echo ""
-read -p "Select user type [1-4]: " USER_TYPE
+read -p "Select user type [1-5]: " USER_TYPE
 
 case "$USER_TYPE" in
     1)
         GRANT_SUDO="n"
         GRANT_DOCKER="n"
         TUNNEL_ONLY="n"
+        CI_RUNNER="n"
         USER_TYPE_NAME="Developer"
         ;;
     2)
         GRANT_SUDO="y"
         GRANT_DOCKER="n"
         TUNNEL_ONLY="n"
+        CI_RUNNER="n"
         USER_TYPE_NAME="DevOps"
         ;;
     3)
         GRANT_SUDO="y"
         GRANT_DOCKER="y"
         TUNNEL_ONLY="n"
+        CI_RUNNER="n"
         USER_TYPE_NAME="Infra Admin"
         echo ""
         log_warn "INFRA ADMIN WARNING:"
@@ -84,6 +88,7 @@ case "$USER_TYPE" in
         GRANT_SUDO="n"
         GRANT_DOCKER="n"
         TUNNEL_ONLY="y"
+        CI_RUNNER="n"
         USER_TYPE_NAME="Tunnel Only"
         echo ""
         log_info "TUNNEL ONLY USER:"
@@ -92,8 +97,21 @@ case "$USER_TYPE" in
         echo "  Perfect for dev partners who need DB/Redis access from local."
         echo ""
         ;;
+    5)
+        GRANT_SUDO="n"
+        GRANT_DOCKER="y"
+        TUNNEL_ONLY="n"
+        CI_RUNNER="y"
+        USER_TYPE_NAME="CI Runner"
+        echo ""
+        log_info "CI RUNNER USER:"
+        echo "  This is a service account for CI/CD runners (e.g., gitlab-runner)."
+        echo "  It has Docker + apps group access but NO sudo and NO SSH access."
+        echo "  Use this after installing gitlab-runner from official docs."
+        echo ""
+        ;;
     *)
-        log_error "Invalid option. Choose 1, 2, 3, or 4"
+        log_error "Invalid option. Choose 1, 2, 3, 4, or 5"
         exit 1
         ;;
 esac
@@ -103,7 +121,12 @@ echo ""
 #######################################
 # Get user information
 #######################################
-read -p "Enter username for new team member: " USERNAME
+if [[ "$CI_RUNNER" == "y" ]]; then
+    read -p "Enter username for CI runner [gitlab-runner]: " USERNAME
+    USERNAME="${USERNAME:-gitlab-runner}"
+else
+    read -p "Enter username for new team member: " USERNAME
+fi
 
 # Validate username
 if [[ ! "$USERNAME" =~ ^[a-z_][a-z0-9_-]*$ ]]; then
@@ -113,8 +136,13 @@ fi
 
 # Check if user already exists
 if id "$USERNAME" &>/dev/null; then
-    log_error "User $USERNAME already exists!"
-    read -p "Do you want to update this user's permissions and SSH key? (y/n): " UPDATE_USER
+    if [[ "$CI_RUNNER" == "y" ]]; then
+        log_warn "User $USERNAME already exists"
+        read -p "Do you want to update this user's group permissions? (y/n): " UPDATE_USER
+    else
+        log_error "User $USERNAME already exists!"
+        read -p "Do you want to update this user's permissions and SSH key? (y/n): " UPDATE_USER
+    fi
     if [[ "$UPDATE_USER" != "y" ]]; then
         log_info "Exiting without changes"
         exit 0
@@ -124,8 +152,8 @@ else
     USER_EXISTS=false
 fi
 
-# Get password (only for new users)
-if [[ "$USER_EXISTS" == "false" ]]; then
+# Get password (only for new users, skip for tunnel-only and CI runner)
+if [[ "$USER_EXISTS" == "false" ]] && [[ "$TUNNEL_ONLY" != "y" ]] && [[ "$CI_RUNNER" != "y" ]]; then
     read -s -p "Enter password for $USERNAME: " PASSWORD
     echo ""
     read -s -p "Confirm password: " PASSWORD_CONFIRM
@@ -137,19 +165,23 @@ if [[ "$USER_EXISTS" == "false" ]]; then
     fi
 fi
 
-# Get SSH public key
-echo ""
-log_info "Please provide SSH public key for $USERNAME"
-echo "Paste the SSH public key (press Enter when done):"
-read SSH_PUBLIC_KEY
+# Get SSH public key (skip for CI runner - service account)
+if [[ "$CI_RUNNER" != "y" ]]; then
+    echo ""
+    log_info "Please provide SSH public key for $USERNAME"
+    echo "Paste the SSH public key (press Enter when done):"
+    read SSH_PUBLIC_KEY
 
-if [[ -z "$SSH_PUBLIC_KEY" ]]; then
-    log_warn "No SSH key provided!"
-    read -p "Continue without SSH key? User will need password auth. (y/n): " CONTINUE
-    if [[ "$CONTINUE" != "y" ]]; then
-        log_info "Exiting without changes"
-        exit 1
+    if [[ -z "$SSH_PUBLIC_KEY" ]]; then
+        log_warn "No SSH key provided!"
+        read -p "Continue without SSH key? User will need password auth. (y/n): " CONTINUE
+        if [[ "$CONTINUE" != "y" ]]; then
+            log_info "Exiting without changes"
+            exit 1
+        fi
     fi
+else
+    SSH_PUBLIC_KEY=""
 fi
 
 #######################################
@@ -161,6 +193,11 @@ if [[ "$USER_EXISTS" == "false" ]]; then
         # Tunnel-only user gets nologin shell
         useradd -m -s /usr/sbin/nologin "$USERNAME"
         log_info "User $USERNAME created (tunnel-only, no shell)"
+    elif [[ "$CI_RUNNER" == "y" ]]; then
+        # CI runner needs shell but no password (service account)
+        useradd -m -s /bin/bash "$USERNAME"
+        passwd -l "$USERNAME"  # Lock password (no login via password)
+        log_info "User $USERNAME created (CI runner service account, password locked)"
     else
         useradd -m -s /bin/bash "$USERNAME"
         echo "$USERNAME:$PASSWORD" | chpasswd
@@ -171,6 +208,9 @@ else
     if [[ "$TUNNEL_ONLY" == "y" ]]; then
         usermod -s /usr/sbin/nologin "$USERNAME"
         log_info "Shell changed to nologin (tunnel-only)"
+    elif [[ "$CI_RUNNER" == "y" ]]; then
+        usermod -s /bin/bash "$USERNAME"
+        log_info "Shell set to /bin/bash for CI runner"
     fi
 fi
 
@@ -178,6 +218,12 @@ fi
 # Handle group memberships
 #######################################
 USER_HOME=$(eval echo ~$USERNAME)
+
+# Create apps group if it doesn't exist (for app directory access)
+if ! getent group apps &>/dev/null; then
+    groupadd apps
+    log_info "Created 'apps' group for application directory access"
+fi
 
 # Sudo access
 if [[ "$GRANT_SUDO" == "y" ]]; then
@@ -192,7 +238,7 @@ else
     fi
 fi
 
-# Docker access
+# Docker access (Infra Admin only)
 if [[ "$GRANT_DOCKER" == "y" ]]; then
     if getent group docker &>/dev/null; then
         log_step "Granting Docker access to $USERNAME"
@@ -201,6 +247,10 @@ if [[ "$GRANT_DOCKER" == "y" ]]; then
     else
         log_warn "Docker group does not exist. Install Docker first."
     fi
+
+    # Infra Admin always gets apps group access
+    usermod -aG apps "$USERNAME"
+    log_info "Apps group access granted"
 else
     # Remove from docker group if exists (for updates)
     if [[ "$USER_EXISTS" == "true" ]] && getent group docker &>/dev/null; then
@@ -209,6 +259,29 @@ else
             log_info "Docker access removed"
         fi
     fi
+fi
+
+# Apps group access for DevOps (optional - can read app configs without sudo)
+if [[ "$GRANT_SUDO" == "y" ]] && [[ "$GRANT_DOCKER" != "y" ]] && [[ "$TUNNEL_ONLY" != "y" ]]; then
+    echo ""
+    echo -e "${CYAN}Apps Group Access:${NC}"
+    echo "  The 'apps' group allows reading application configs in /opt/apps"
+    echo "  without needing sudo. Useful for debugging."
+    read -p "Add $USERNAME to apps group? (y/n): " ADD_APPS_GROUP
+
+    if [[ "$ADD_APPS_GROUP" == "y" ]]; then
+        usermod -aG apps "$USERNAME"
+        log_info "Apps group access granted (can read /opt/apps)"
+        APPS_GROUP_GRANTED="y"
+    else
+        # Remove from apps group if exists (for updates)
+        if [[ "$USER_EXISTS" == "true" ]]; then
+            gpasswd -d "$USERNAME" apps 2>/dev/null || true
+        fi
+        APPS_GROUP_GRANTED="n"
+    fi
+else
+    APPS_GROUP_GRANTED="n"
 fi
 
 #######################################
@@ -298,10 +371,18 @@ else
 fi
 if [[ "$GRANT_DOCKER" == "y" ]]; then
     echo -e "  - Docker access: ${GREEN}YES${NC} (can manage all containers)"
+    echo -e "  - Apps group: ${GREEN}YES${NC} (can access /opt/apps)"
 else
     echo -e "  - Docker access: ${YELLOW}NO${NC} (cannot control infrastructure)"
+    if [[ "$APPS_GROUP_GRANTED" == "y" ]]; then
+        echo -e "  - Apps group: ${GREEN}YES${NC} (can read /opt/apps)"
+    else
+        echo -e "  - Apps group: ${YELLOW}NO${NC}"
+    fi
 fi
-if [[ -n "$SSH_PUBLIC_KEY" ]]; then
+if [[ "$CI_RUNNER" == "y" ]]; then
+    echo -e "  - SSH key: ${YELLOW}N/A${NC} (service account)"
+elif [[ -n "$SSH_PUBLIC_KEY" ]]; then
     echo -e "  - SSH key: ${GREEN}CONFIGURED${NC}"
 else
     echo -e "  - SSH key: ${YELLOW}NOT SET${NC} (password auth only)"
@@ -313,7 +394,30 @@ echo ""
 SSH_PORT=$(grep -E "^Port " /etc/ssh/sshd_config.d/hardening.conf 2>/dev/null | awk '{print $2}' || grep -E "^Port " /etc/ssh/sshd_config 2>/dev/null | awk '{print $2}' || echo "22")
 HOSTNAME=$(hostname -I | awk '{print $1}')
 
-if [[ "$TUNNEL_ONLY" == "y" ]]; then
+if [[ "$CI_RUNNER" == "y" ]]; then
+    log_info "CI Runner service account configured!"
+    echo ""
+    echo -e "${CYAN}Next steps:${NC}"
+    echo "  1. Install gitlab-runner (if not already installed):"
+    echo "     curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | sudo bash"
+    echo "     sudo apt-get install gitlab-runner"
+    echo ""
+    echo "  2. Register the runner:"
+    echo "     sudo gitlab-runner register"
+    echo ""
+    echo "  3. Restart gitlab-runner service:"
+    echo "     sudo systemctl restart gitlab-runner"
+    echo ""
+    echo -e "${CYAN}What $USERNAME can do:${NC}"
+    echo "  - Run docker commands (docker ps, docker compose, etc.)"
+    echo "  - Write to /opt/apps directory"
+    echo "  - Deploy applications via CI/CD"
+    echo ""
+    echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
+    echo "  - SSH into the server (no password, no key)"
+    echo "  - Run commands as root (no sudo)"
+    echo "  - Access system configuration"
+elif [[ "$TUNNEL_ONLY" == "y" ]]; then
     log_info "Dev partner can create SSH tunnel with:"
     echo ""
     echo "  # Create tunnel (run on local machine)"
@@ -358,12 +462,26 @@ else
     echo -e "${CYAN}What $USERNAME CANNOT do:${NC}"
     if [[ "$GRANT_DOCKER" != "y" ]]; then
         echo "  - Control Docker containers (docker ps, docker stop, etc.)"
-        echo "  - Access infrastructure management scripts"
+        echo "  - Modify application configs directly on server"
     fi
     if [[ "$GRANT_SUDO" != "y" ]]; then
         echo "  - Run commands as root"
         echo "  - Install system packages"
         echo "  - Modify system configuration"
+    fi
+
+    # Show Grafana access for non-docker users
+    if [[ "$GRANT_DOCKER" != "y" ]]; then
+        echo ""
+        echo -e "${CYAN}How to view logs (via Grafana):${NC}"
+        echo "  1. Open: http://$HOSTNAME:3000"
+        echo "  2. Login with Grafana credentials"
+        echo "  3. Go to: Explore → Loki → Select container"
+        echo ""
+        echo -e "${CYAN}Production Workflow:${NC}"
+        echo "  - All app changes should go through Git → CI/CD"
+        echo "  - Never modify .env or docker-compose directly on server"
+        echo "  - Use GitLab/GitHub CI variables for secrets"
     fi
 fi
 

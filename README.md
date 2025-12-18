@@ -687,11 +687,12 @@ Run `./secure.sh` after setup to restrict access:
 ### Recommended Setup Flow
 
 ```bash
-# 1. Initial VPS setup (creates your admin user)
+# 1. Initial VPS setup (hardens SSH, firewall, fail2ban)
 sudo bash scripts/vps-initial-setup.sh
 
-# 2. Install Docker (only your admin user gets docker access)
-sudo bash scripts/docker-install.sh
+# 2. Install Docker (current user gets docker access)
+bash scripts/docker-install.sh
+exit  # Logout and login again for docker group
 
 # 3. Setup infrastructure
 cd /opt/infra
@@ -704,6 +705,7 @@ sudo bash scripts/add-user.sh
 #   - Developers: type 1 (SSH only)
 #   - DevOps: type 2 (sudo, no docker)
 #   - Infra Admins: type 3 (full access)
+#   - Tunnel Only: type 4 (DB access from local)
 
 # 5. Audit access periodically
 sudo bash scripts/audit-access.sh

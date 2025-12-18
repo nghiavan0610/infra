@@ -1,12 +1,13 @@
 # Add User Guide - Dev Team Management
 
-Quick guide for adding new team members to your VPS.
+Quick guide for adding users to your VPS, including your first Infra Admin.
 
 ---
 
 ## When to Use This Script
 
 Use `add-user.sh` to:
+- ✅ Create your first Infra Admin (after Docker is installed)
 - ✅ Add new dev team members
 - ✅ Update SSH keys for existing users
 - ✅ Grant/manage sudo access
@@ -14,7 +15,10 @@ Use `add-user.sh` to:
 - ✅ Set up SSH key authentication
 - ✅ Create tunnel-only users for dev partners
 
-**DO NOT use for:** Initial VPS setup (use `vps-initial-setup.sh` instead)
+**Typical Flow:**
+1. `vps-initial-setup.sh` → Hardens system (SSH, firewall, fail2ban)
+2. `docker-install.sh` → Installs Docker (current user gets docker access)
+3. `add-user.sh` → Create Infra Admin or add team members
 
 ---
 
@@ -47,14 +51,15 @@ sudo bash add-user.sh
 
 ## User Types
 
-The script offers 4 user types:
+The script offers 5 user types:
 
-| Type | SSH | Sudo | Docker | Use Case |
-|------|-----|------|--------|----------|
-| **1) Developer** | ✅ | ❌ | ❌ | App deployment only |
-| **2) DevOps** | ✅ | ✅ | ❌ | System management (NO Docker) |
-| **3) Infra Admin** | ✅ | ✅ | ✅ | Full infrastructure control |
-| **4) Tunnel Only** | tunnel | ❌ | ❌ | DB access from local (no shell) |
+| Type | SSH | Sudo | Docker | Apps | Use Case |
+|------|-----|------|--------|------|----------|
+| **1) Developer** | ✅ | ❌ | ❌ | ❌ | App deployment only |
+| **2) DevOps** | ✅ | ✅ | ❌ | Optional | System management (NO Docker) |
+| **3) Infra Admin** | ✅ | ✅ | ✅ | ✅ | Full infrastructure control |
+| **4) Tunnel Only** | tunnel | ❌ | ❌ | ❌ | DB access from local (no shell) |
+| **5) CI Runner** | ❌ | ❌ | ✅ | ✅ | GitLab runner service account |
 
 ---
 
@@ -69,8 +74,9 @@ User Types:
   2) DevOps      - SSH + sudo (system management, NO docker)
   3) Infra Admin - SSH + sudo + docker (full infrastructure control)
   4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)
+  5) CI Runner   - Docker + apps access (for gitlab-runner service, no SSH)
 
-Select user type [1-4]: 1
+Select user type [1-5]: 1
 ```
 
 ### 2. Username
@@ -248,7 +254,77 @@ What dev-partner CANNOT do:
 ==========================================
 ```
 
-### Example 4: Update SSH Key for Existing User
+### Example 4: Add CI Runner (for GitLab Runner)
+
+```bash
+$ sudo bash add-user.sh
+
+==========================================
+  Add New User - Dev Team Management
+==========================================
+
+User Types:
+  1) Developer   - SSH access only (application deployment)
+  2) DevOps      - SSH + sudo (system management, NO docker)
+  3) Infra Admin - SSH + sudo + docker (full infrastructure control)
+  4) Tunnel Only - SSH tunnel only (access DB/Redis from local, no shell)
+  5) CI Runner   - Docker + apps access (for gitlab-runner service, no SSH)
+
+Select user type [1-5]: 5
+
+CI RUNNER USER:
+  This is a service account for CI/CD runners (e.g., gitlab-runner).
+  It has Docker + apps group access but NO sudo and NO SSH access.
+  Use this after installing gitlab-runner from official docs.
+
+Enter username for CI runner [gitlab-runner]:
+
+[INFO] User gitlab-runner created (CI runner service account, password locked)
+[INFO] Docker access granted
+[INFO] Apps group access granted
+
+==========================================
+[INFO] User Setup Complete!
+==========================================
+
+User Information:
+  - Username: gitlab-runner
+  - Type: CI Runner
+  - Home directory: /home/gitlab-runner
+
+Permissions:
+  - Sudo access: NO
+  - Docker access: YES (can manage all containers)
+  - Apps group: YES (can access /opt/apps)
+  - SSH key: N/A (service account)
+
+[INFO] CI Runner service account configured!
+
+Next steps:
+  1. Install gitlab-runner (if not already installed):
+     curl -L https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh | sudo bash
+     sudo apt-get install gitlab-runner
+
+  2. Register the runner:
+     sudo gitlab-runner register
+
+  3. Restart gitlab-runner service:
+     sudo systemctl restart gitlab-runner
+
+What gitlab-runner can do:
+  - Run docker commands (docker ps, docker compose, etc.)
+  - Write to /opt/apps directory
+  - Deploy applications via CI/CD
+
+What gitlab-runner CANNOT do:
+  - SSH into the server (no password, no key)
+  - Run commands as root (no sudo)
+  - Access system configuration
+
+==========================================
+```
+
+### Example 5: Update SSH Key for Existing User
 
 ```bash
 $ sudo bash add-user.sh
@@ -479,14 +555,16 @@ sudo userdel -r username
 
 | Task | add-user.sh | vps-initial-setup.sh |
 |------|-------------|----------------------|
-| **Purpose** | Add team members | Initial VPS setup |
+| **Purpose** | User management | System hardening |
 | **Run frequency** | Many times | Once |
-| **Creates users** | ✅ | ✅ |
-| **Updates SSH config** | ❌ | ✅ |
+| **Creates users** | ✅ (with full permissions) | ❌ |
+| **SSH hardening** | ❌ | ✅ |
 | **Configures firewall** | ❌ | ✅ |
 | **Configures fail2ban** | ❌ | ✅ |
-| **Restarts services** | ❌ | ✅ |
-| **Safe to run repeatedly** | ✅ | ⚠️ (now yes, but overkill) |
+| **Grants Docker access** | ✅ (Infra Admin type) | ❌ |
+| **Safe to run repeatedly** | ✅ | ✅ |
+
+**Note:** `vps-initial-setup.sh` focuses only on system hardening. All user creation (including your first Infra Admin) is done via `add-user.sh`.
 
 ---
 

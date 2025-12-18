@@ -3,7 +3,16 @@
 #######################################
 # VPS Initial Setup Script for Production
 # Run this FIRST when you get a fresh VPS
-# Features: User creation, SSH hardening, firewall, fail2ban, updates
+#
+# This script ONLY handles system hardening:
+#   - SSH hardening (port, security settings)
+#   - Firewall configuration
+#   - Fail2ban / brute-force protection
+#   - System limits & optimizations
+#   - Automatic security updates
+#
+# User management is handled separately by add-user.sh
+# Run add-user.sh AFTER docker-install.sh to create Infra Admin
 #######################################
 
 set -euo pipefail
@@ -13,6 +22,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
@@ -22,42 +32,44 @@ log_step() { echo -e "${BLUE}[STEP]${NC} $1"; }
 
 # Check if running as root
 if [[ $EUID -ne 0 ]]; then
-   log_error "This script must be run as root (first time setup)"
+   log_error "This script must be run as root"
    log_info "Run: sudo bash vps-initial-setup.sh"
    exit 1
 fi
 
+# Get the actual user who invoked sudo
+CURRENT_USER="${SUDO_USER:-$USER}"
+CURRENT_USER_HOME=$(eval echo ~$CURRENT_USER)
+
 echo "=========================================="
-echo "  VPS Initial Setup for Production"
+echo "  VPS Initial Setup - System Hardening"
 echo "=========================================="
+echo ""
+log_info "Current user: $CURRENT_USER"
 echo ""
 
 #######################################
-# Configuration Variables
+# Configuration
 #######################################
-read -p "Enter new sudo username: " NEW_USER
-read -s -p "Enter password for $NEW_USER: " NEW_PASSWORD
-echo ""
-read -s -p "Confirm password: " NEW_PASSWORD_CONFIRM
-echo ""
-
-if [[ "$NEW_PASSWORD" != "$NEW_PASSWORD_CONFIRM" ]]; then
-    log_error "Passwords do not match"
-    exit 1
-fi
-
-read -p "Enter SSH port (default 22, recommended: 2222): " SSH_PORT
+echo -e "${CYAN}SSH Configuration:${NC}"
+read -p "Enter SSH port (default 22, recommended 2222): " SSH_PORT
 SSH_PORT=${SSH_PORT:-2222}
 
-read -p "Paste your SSH public key (for key-based auth): " SSH_PUBLIC_KEY
+echo ""
+echo -e "${CYAN}SSH Key Setup (optional):${NC}"
+echo "If your current user already has SSH key configured, you can skip this."
+read -p "Add/update SSH public key for $CURRENT_USER? (y/n): " SETUP_SSH_KEY
 
-if [[ -z "$SSH_PUBLIC_KEY" ]]; then
-    log_warn "No SSH key provided. You should use SSH keys for better security."
-    read -p "Continue without SSH key? (y/n): " CONTINUE
-    if [[ "$CONTINUE" != "y" ]]; then
-        exit 1
-    fi
+SSH_PUBLIC_KEY=""
+if [[ "$SETUP_SSH_KEY" == "y" ]]; then
+    echo "Paste your SSH public key (starts with ssh-rsa or ssh-ed25519):"
+    read SSH_PUBLIC_KEY
 fi
+
+echo ""
+echo -e "${CYAN}Root Login:${NC}"
+read -p "Disable root SSH login? (recommended if you have sudo user) (y/n): " DISABLE_ROOT
+DISABLE_ROOT=${DISABLE_ROOT:-y}
 
 #######################################
 # Detect OS
@@ -82,51 +94,31 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     apt-get install -y curl wget vim git ufw fail2ban unattended-upgrades
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
     yum update -y
-    # Install EPEL (for additional packages)
     yum install -y epel-release || true
-    # Install base packages (fail2ban not available on OL9, will use firewalld instead)
     yum install -y curl wget vim git firewalld policycoreutils-python-utils audit
-    # Try to install fail2ban if available (works on CentOS/RHEL 7-8)
-    yum install -y fail2ban fail2ban-systemd 2>/dev/null || log_warn "fail2ban not available (will use firewalld rate limiting)"
+    yum install -y fail2ban fail2ban-systemd 2>/dev/null || log_warn "fail2ban not available"
 fi
 log_info "System updated"
 
 #######################################
-# Create/Update sudo user
-#######################################
-log_step "Setting up user: $NEW_USER"
-
-# Check if user exists
-if id "$NEW_USER" &>/dev/null; then
-    log_info "User $NEW_USER already exists, updating configuration..."
-    # Update password for existing user
-    echo "$NEW_USER:$NEW_PASSWORD" | chpasswd
-    log_info "Password updated for $NEW_USER"
-else
-    # Create new user
-    useradd -m -s /bin/bash "$NEW_USER"
-    echo "$NEW_USER:$NEW_PASSWORD" | chpasswd
-    log_info "User $NEW_USER created"
-fi
-
-# Ensure user has sudo privileges (works for both new and existing users)
-usermod -aG sudo "$NEW_USER" 2>/dev/null || usermod -aG wheel "$NEW_USER"
-log_info "Sudo privileges confirmed for $NEW_USER"
-
-#######################################
-# Setup SSH key authentication
+# Setup SSH key for current user (if requested)
 #######################################
 if [[ -n "$SSH_PUBLIC_KEY" ]]; then
-    log_step "Setting up SSH key authentication for $NEW_USER"
+    log_step "Setting up SSH key for $CURRENT_USER"
 
-    USER_HOME=$(eval echo ~$NEW_USER)
-    mkdir -p "$USER_HOME/.ssh"
-    echo "$SSH_PUBLIC_KEY" > "$USER_HOME/.ssh/authorized_keys"
-    chmod 700 "$USER_HOME/.ssh"
-    chmod 600 "$USER_HOME/.ssh/authorized_keys"
-    chown -R "$NEW_USER:$NEW_USER" "$USER_HOME/.ssh"
+    mkdir -p "$CURRENT_USER_HOME/.ssh"
 
-    log_info "SSH key configured"
+    # Check if key already exists
+    if grep -q "$SSH_PUBLIC_KEY" "$CURRENT_USER_HOME/.ssh/authorized_keys" 2>/dev/null; then
+        log_warn "SSH key already exists"
+    else
+        echo "$SSH_PUBLIC_KEY" >> "$CURRENT_USER_HOME/.ssh/authorized_keys"
+        log_info "SSH key added"
+    fi
+
+    chmod 700 "$CURRENT_USER_HOME/.ssh"
+    chmod 600 "$CURRENT_USER_HOME/.ssh/authorized_keys"
+    chown -R "$CURRENT_USER:$CURRENT_USER" "$CURRENT_USER_HOME/.ssh"
 fi
 
 #######################################
@@ -137,12 +129,33 @@ log_step "Hardening SSH configuration..."
 # Backup original config
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%F_%T)
 
+# Create hardening config directory if needed
+mkdir -p /etc/ssh/sshd_config.d
+
+# Determine root login setting
+if [[ "$DISABLE_ROOT" == "y" ]]; then
+    ROOT_LOGIN="no"
+else
+    ROOT_LOGIN="prohibit-password"
+fi
+
+# Determine password auth (disable if SSH key is set up)
+if [[ -n "$SSH_PUBLIC_KEY" ]] || [[ -f "$CURRENT_USER_HOME/.ssh/authorized_keys" ]]; then
+    PASSWORD_AUTH="no"
+    log_info "SSH key detected - disabling password authentication"
+else
+    PASSWORD_AUTH="yes"
+    log_warn "No SSH key detected - keeping password authentication enabled"
+fi
+
 # Apply hardened SSH settings
 cat > /etc/ssh/sshd_config.d/hardening.conf <<EOF
 # SSH Hardening Configuration
+# Generated by vps-initial-setup.sh on $(date)
+
 Port $SSH_PORT
-PermitRootLogin no
-PasswordAuthentication yes
+PermitRootLogin $ROOT_LOGIN
+PasswordAuthentication $PASSWORD_AUTH
 PubkeyAuthentication yes
 ChallengeResponseAuthentication no
 UsePAM yes
@@ -156,19 +169,11 @@ MaxSessions 10
 Protocol 2
 EOF
 
-# If SSH key is provided, disable password authentication
-if [[ -n "$SSH_PUBLIC_KEY" ]]; then
-    sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/hardening.conf
-    log_info "SSH password authentication disabled (key-based only)"
-fi
-
 # Configure SELinux for custom SSH port (RHEL-based systems)
 if [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
     if [[ "$SSH_PORT" != "22" ]]; then
         log_step "Configuring SELinux for SSH port $SSH_PORT..."
-        # Check if semanage is available
         if command -v semanage &> /dev/null; then
-            # Check if port is already configured
             if ! semanage port -l | grep -q "ssh_port_t.*$SSH_PORT"; then
                 semanage port -a -t ssh_port_t -p tcp $SSH_PORT 2>/dev/null || \
                 semanage port -m -t ssh_port_t -p tcp $SSH_PORT 2>/dev/null || \
@@ -181,12 +186,10 @@ if [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || 
     fi
 fi
 
-# Restart SSH (don't disconnect current session)
+# Restart SSH
 systemctl restart sshd || systemctl restart ssh
 
-log_info "SSH hardened - New port: $SSH_PORT"
-log_warn "IMPORTANT: Test SSH connection in a NEW terminal before closing this one!"
-log_warn "Connect with: ssh -p $SSH_PORT $NEW_USER@YOUR_SERVER_IP"
+log_info "SSH hardened - Port: $SSH_PORT"
 
 #######################################
 # Configure firewall
@@ -194,7 +197,6 @@ log_warn "Connect with: ssh -p $SSH_PORT $NEW_USER@YOUR_SERVER_IP"
 log_step "Configuring firewall..."
 
 if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
-    # UFW setup
     ufw --force reset
     ufw default deny incoming
     ufw default allow outgoing
@@ -202,11 +204,9 @@ if [[ "$OS" == "ubuntu" ]] || [[ "$OS" == "debian" ]]; then
     ufw allow 80/tcp comment 'HTTP'
     ufw allow 443/tcp comment 'HTTPS'
     ufw --force enable
-    ufw status
     log_info "UFW firewall configured"
 
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
-    # Firewalld setup
     systemctl start firewalld
     systemctl enable firewalld
     firewall-cmd --permanent --zone=public --add-port=$SSH_PORT/tcp
@@ -217,33 +217,16 @@ elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] |
 fi
 
 #######################################
-# Configure SSH Protection (fail2ban or alternative)
+# Configure SSH Protection (fail2ban)
 #######################################
 log_step "Configuring SSH brute-force protection..."
 
-# Verify fail2ban is installed
-if ! command -v fail2ban-server &> /dev/null; then
-    log_warn "fail2ban not available"
-
-    # For Oracle Linux 9, skip aggressive firewalld rate limiting
-    # SSH is already protected by: key-only auth, MaxAuthTries=3, firewall
-    if [[ "$OS" == "ol" ]]; then
-        log_info "Oracle Linux 9: SSH protected by key-only auth + MaxAuthTries=3"
-        log_info "Skipping firewalld rate limiting (can cause connection issues)"
-        log_info "For optional advanced protection later, run: ./setup-ssh-protection-ol9.sh"
-    else
-        log_warn "Install fail2ban manually for SSH protection"
-    fi
-else
-    # fail2ban is available, configure it
+if command -v fail2ban-server &> /dev/null; then
     cat > /etc/fail2ban/jail.local <<EOF
 [DEFAULT]
 bantime = 3600
 findtime = 600
 maxretry = 3
-destemail = root@localhost
-sendername = Fail2Ban
-action = %(action_mwl)s
 
 [sshd]
 enabled = true
@@ -260,8 +243,12 @@ EOF
 
     systemctl enable fail2ban
     systemctl restart fail2ban
-
     log_info "Fail2ban configured (3 failed attempts = 1 hour ban)"
+else
+    log_warn "fail2ban not available"
+    if [[ "$OS" == "ol" ]]; then
+        log_info "Oracle Linux 9: SSH protected by MaxAuthTries=3"
+    fi
 fi
 
 #######################################
@@ -286,22 +273,17 @@ APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
 EOF
-
     log_info "Automatic security updates enabled"
+
 elif [[ "$OS" == "centos" ]] || [[ "$OS" == "rhel" ]] || [[ "$OS" == "amzn" ]] || [[ "$OS" == "ol" ]]; then
-    # Oracle Linux 9 uses dnf-automatic instead of yum-cron
     if command -v dnf &> /dev/null; then
         yum install -y dnf-automatic
-
-        # Configure to apply security updates automatically
         sed -i 's/^apply_updates = .*/apply_updates = yes/' /etc/dnf/automatic.conf 2>/dev/null || true
         sed -i 's/^upgrade_type = .*/upgrade_type = security/' /etc/dnf/automatic.conf 2>/dev/null || true
-
         systemctl enable dnf-automatic.timer
         systemctl start dnf-automatic.timer
         log_info "Automatic security updates enabled (dnf-automatic)"
     else
-        # Fallback for older RHEL/CentOS versions
         yum install -y yum-cron
         systemctl enable yum-cron
         systemctl start yum-cron
@@ -321,7 +303,9 @@ log_info "Timezone set to UTC"
 #######################################
 log_step "Configuring system limits for production..."
 
-cat >> /etc/security/limits.conf <<EOF
+# Check if limits already configured
+if ! grep -q "# Production system limits" /etc/security/limits.conf; then
+    cat >> /etc/security/limits.conf <<EOF
 
 # Production system limits
 * soft nofile 65536
@@ -329,9 +313,11 @@ cat >> /etc/security/limits.conf <<EOF
 * soft nproc 32768
 * hard nproc 32768
 EOF
+fi
 
-# Sysctl optimizations
-cat >> /etc/sysctl.conf <<EOF
+# Check if sysctl already configured
+if ! grep -q "# Network optimizations" /etc/sysctl.conf; then
+    cat >> /etc/sysctl.conf <<EOF
 
 # Network optimizations
 net.core.somaxconn = 65535
@@ -354,88 +340,86 @@ net.ipv4.icmp_ignore_bogus_error_responses = 1
 vm.swappiness = 10
 vm.vfs_cache_pressure = 50
 EOF
+fi
 
-sysctl -p >/dev/null
-
-log_info "System limits configured for production"
+sysctl -p >/dev/null 2>&1 || true
+log_info "System limits configured"
 
 #######################################
-# Create helpful aliases and motd
+# Create helpful aliases
 #######################################
 log_step "Setting up helpful aliases..."
 
-cat >> "$USER_HOME/.bashrc" <<'EOF'
+if ! grep -q "# Infrastructure aliases" "$CURRENT_USER_HOME/.bashrc"; then
+    cat >> "$CURRENT_USER_HOME/.bashrc" <<'EOF'
 
-# Custom aliases for Docker and system management
+# Infrastructure aliases
 alias dps='docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"'
 alias dlog='docker logs -f'
-alias dstop='docker stop $(docker ps -q)'
+alias dlogs='docker compose logs -f'
+alias dstop='docker stop $(docker ps -q) 2>/dev/null || echo "No containers running"'
 alias dclean='docker system prune -af'
-alias update='sudo apt update && sudo apt upgrade -y'  # Change for yum if needed
-alias ports='sudo netstat -tulpn | grep LISTEN'
+alias ports='sudo ss -tulpn | grep LISTEN'
 alias meminfo='free -h'
-alias cpuinfo='top -bn1 | grep "Cpu(s)"'
+alias diskinfo='df -h | grep -v tmpfs'
 EOF
-
-chown "$NEW_USER:$NEW_USER" "$USER_HOME/.bashrc"
-
-log_info "Helpful aliases added to .bashrc"
+    chown "$CURRENT_USER:$CURRENT_USER" "$CURRENT_USER_HOME/.bashrc"
+    log_info "Helpful aliases added"
+fi
 
 #######################################
 # Display summary
 #######################################
+HOSTNAME=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_SERVER_IP")
+
 echo ""
 echo "=========================================="
-log_info "VPS Initial Setup Complete!"
+log_info "System Hardening Complete!"
 echo "=========================================="
 echo ""
-log_info "Configuration Summary:"
-echo "  - User: $NEW_USER (with sudo access)"
+echo -e "${CYAN}Configuration Summary:${NC}"
 echo "  - SSH port: $SSH_PORT"
-echo "  - Root login: DISABLED"
-if [[ -n "$SSH_PUBLIC_KEY" ]]; then
-echo "  - SSH auth: KEY-BASED ONLY"
-else
-echo "  - SSH auth: PASSWORD (consider adding SSH key)"
-fi
-echo "  - Firewall: ENABLED (ports $SSH_PORT, 80, 443)"
+echo "  - Root login: $([[ "$ROOT_LOGIN" == "no" ]] && echo "DISABLED" || echo "Key-only")"
+echo "  - Password auth: $([[ "$PASSWORD_AUTH" == "no" ]] && echo "DISABLED (key-only)" || echo "ENABLED")"
+echo "  - Firewall: ENABLED (ports: $SSH_PORT, 80, 443)"
 if command -v fail2ban-server &> /dev/null; then
     echo "  - Fail2ban: ENABLED"
 else
-    echo "  - SSH protection: MaxAuthTries=3, key-only auth"
+    echo "  - SSH protection: MaxAuthTries=3"
 fi
 echo "  - Auto updates: ENABLED"
 echo "  - Timezone: UTC"
 echo ""
-log_warn "CRITICAL NEXT STEPS:"
-echo "  1. Open a NEW terminal and test SSH connection:"
-echo "     ssh -p $SSH_PORT $NEW_USER@YOUR_SERVER_IP"
+
+echo -e "${YELLOW}CRITICAL: Test SSH connection in a NEW terminal:${NC}"
 echo ""
-echo "  2. Verify you can login and use sudo:"
-echo "     sudo whoami"
+echo "  ssh -p $SSH_PORT $CURRENT_USER@$HOSTNAME"
 echo ""
-echo "  3. ONLY after successful test, close this root session"
+echo -e "${YELLOW}Keep this terminal open until you verify access!${NC}"
 echo ""
-log_info "After verifying access, you can run:"
-echo "  - Docker installation: bash scripts/docker-install.sh"
-echo "  - View fail2ban status: sudo fail2ban-client status sshd"
-echo "  - View firewall rules: sudo ufw status (or firewall-cmd --list-all)"
-echo "  - Check system resources: htop (install with: apt install htop)"
-echo ""
-log_warn "Keep this terminal open until you verify new SSH access!"
-echo ""
+
+echo "=========================================="
+echo -e "${CYAN}Next Steps:${NC}"
 echo "=========================================="
 echo ""
-log_info "Recommended Setup Order:"
-echo "  1. Test SSH access in new terminal"
-echo "  2. Install Docker: bash scripts/docker-install.sh"
-echo "  3. Setup infrastructure: cd /opt/infra && ./setup.sh"
-echo "  4. Secure permissions: ./secure.sh"
-echo "  5. Add team members: sudo bash scripts/add-user.sh"
+echo "1. Test SSH in new terminal (command above)"
 echo ""
-echo "  User Types for add-user.sh:"
-echo "    - Developer:   SSH only (deploy apps)"
-echo "    - DevOps:      SSH + sudo (manage system, NO docker)"
-echo "    - Infra Admin: SSH + sudo + docker (full control)"
+echo "2. Install Docker:"
+echo "   sudo bash scripts/docker-install.sh"
+echo ""
+echo "3. Create your Infra Admin user (full permissions):"
+echo "   sudo bash scripts/add-user.sh"
+echo "   -> Select type 3 (Infra Admin)"
+echo ""
+echo "4. Setup infrastructure:"
+echo "   cd /opt/infra && ./setup.sh"
+echo ""
+echo "=========================================="
+echo -e "${CYAN}User Types (add-user.sh):${NC}"
+echo "=========================================="
+echo "  1) Developer   - SSH only (deploy apps)"
+echo "  2) DevOps      - SSH + sudo (manage system)"
+echo "  3) Infra Admin - SSH + sudo + docker (FULL control)"
+echo "  4) Tunnel Only - SSH tunnel only (DB access)"
 echo ""
 echo "=========================================="

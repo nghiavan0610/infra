@@ -222,6 +222,30 @@ add_user_to_docker_group() {
 }
 
 #######################################
+# Setup apps directory for deployments
+#######################################
+setup_apps_directory() {
+    log_info "Setting up /opt/apps directory for deployments..."
+
+    # Create apps group if it doesn't exist
+    if ! getent group apps &>/dev/null; then
+        sudo groupadd apps
+        log_info "Created 'apps' group"
+    fi
+
+    # Add current user to apps group
+    sudo usermod -aG apps $USER
+    log_info "Added $USER to apps group"
+
+    # Create /opt/apps with proper permissions
+    sudo mkdir -p /opt/apps
+    sudo chown root:apps /opt/apps
+    sudo chmod 2775 /opt/apps  # setgid so new files inherit apps group
+
+    log_info "Apps directory configured: /opt/apps (group: apps, mode: 2775)"
+}
+
+#######################################
 # Verify installation
 #######################################
 verify_installation() {
@@ -259,20 +283,32 @@ display_post_install_info() {
     log_info "Docker installation completed successfully!"
     echo "=========================================="
     echo ""
-    log_info "Next steps:"
-    echo "  1. Log out and log back in (or run: newgrp docker)"
-    echo "  2. Test: docker run hello-world"
-    echo "  3. Test compose: docker compose version"
+    echo "Current user ($USER) has been added to docker group."
     echo ""
-    log_warn "Security recommendations:"
-    echo "  - Configure firewall (ufw/firewalld)"
-    echo "  - Set up fail2ban"
-    echo "  - Use Docker secrets for sensitive data"
-    echo "  - Regular security updates: sudo apt update && sudo apt upgrade"
-    echo "  - Consider using Docker Bench for Security"
+    log_warn "IMPORTANT: Log out and log back in for docker access!"
+    echo "  Or run: newgrp docker"
     echo ""
+    echo "=========================================="
+    log_info "Next Steps:"
+    echo "=========================================="
+    echo ""
+    echo "1. Log out and log back in (required for docker group)"
+    echo ""
+    echo "2. Test Docker:"
+    echo "   docker run hello-world"
+    echo "   docker compose version"
+    echo ""
+    echo "3. Create Infra Admin user (if needed):"
+    echo "   sudo bash scripts/add-user.sh"
+    echo "   -> Select type 3 (Infra Admin) for full permissions"
+    echo ""
+    echo "4. Setup infrastructure:"
+    echo "   cd /opt/infra && ./setup.sh"
+    echo ""
+    echo "=========================================="
     log_info "Docker daemon config: /etc/docker/daemon.json"
     log_info "View logs: sudo journalctl -u docker -f"
+    echo "=========================================="
     echo ""
 }
 
@@ -302,6 +338,7 @@ main() {
     configure_docker_daemon
     start_docker
     add_user_to_docker_group
+    setup_apps_directory
     verify_installation
     display_post_install_info
 }

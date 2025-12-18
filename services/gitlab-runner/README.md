@@ -2,6 +2,19 @@
 
 Run GitLab CI/CD pipelines on your own infrastructure.
 
+> **Production Deployment Guide**: See [PRODUCTION-DEPLOYMENT-GUIDE.md](../../scripts/PRODUCTION-DEPLOYMENT-GUIDE.md) for complete deployment workflow and best practices.
+
+## Overview
+
+```
+Developer → Git Push → GitLab CI/CD → Self-Hosted Runner → Production
+                                           │
+                                           ▼
+                                      Your VPS (Docker access)
+```
+
+The runner has Docker access to deploy containers, but **team members should not SSH to modify files**. All changes go through Git → CI/CD.
+
 ## Setup
 
 ### 1. Get Registration Token
