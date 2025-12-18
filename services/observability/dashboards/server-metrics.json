@@ -125,7 +125,7 @@
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
       "title": "CPU Cores",
       "type": "stat",
-      "targets": [{"expr": "count(node_cpu_seconds_total{mode=\"idle\"}) by (instance) or vector(0)", "refId": "A"}]
+      "targets": [{"expr": "count(count by (cpu)(node_cpu_seconds_total{mode=\"idle\"}))", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
@@ -153,7 +153,7 @@
       "gridPos": {"h": 3, "w": 3, "x": 9, "y": 6},
       "id": 10,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "title": "Total Disk (/)",
+      "title": "Root Disk Size",
       "type": "stat",
       "targets": [{"expr": "max(node_filesystem_size_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})", "refId": "A"}]
     },
@@ -163,7 +163,7 @@
       "gridPos": {"h": 3, "w": 3, "x": 12, "y": 6},
       "id": 11,
       "options": {"colorMode": "value", "graphMode": "none", "justifyMode": "auto", "orientation": "auto", "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false}, "textMode": "auto"},
-      "title": "Free Disk (/)",
+      "title": "Root Disk Free",
       "type": "stat",
       "targets": [{"expr": "max(node_filesystem_avail_bytes{mountpoint=\"/\",fstype!=\"tmpfs\"})", "refId": "A"}]
     },
@@ -229,7 +229,7 @@
       "options": {"legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi", "sort": "desc"}},
       "title": "CPU Usage by Mode (Stacked)",
       "type": "timeseries",
-      "targets": [{"expr": "sum by(mode)(rate(node_cpu_seconds_total{mode=~\"user|system|iowait|steal|nice|softirq|irq\"}[5m])) * 100 / count(node_cpu_seconds_total{mode=\"idle\"})", "legendFormat": "{{mode}}", "refId": "A"}]
+      "targets": [{"expr": "avg by(mode)(rate(node_cpu_seconds_total{mode=~\"user|system|iowait|steal|nice|softirq|irq\"}[5m])) * 100", "legendFormat": "{{mode}}", "refId": "A"}]
     },
     {
       "datasource": {"type": "prometheus", "uid": "prometheus"},
