@@ -205,8 +205,8 @@ show_credentials() {
 
     # Grafana
     if is_container_running "grafana"; then
-        local grafana_user=$(grep "GRAFANA_ADMIN_USER" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
-        local grafana_pass=$(grep "GRAFANA_ADMIN_PASSWORD" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
+        local grafana_user=$(grep "GRAFANA_ADMIN_USER" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2-)
+        local grafana_pass=$(grep "GRAFANA_ADMIN_PASSWORD" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2-)
         local grafana_domain=$(grep "GRAFANA_DOMAIN" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2)
         echo -e "  ${GREEN}●${NC} Grafana (Monitoring)"
         [[ -n "$grafana_domain" ]] && echo -e "    URL:      https://${grafana_domain}"
@@ -248,8 +248,8 @@ show_credentials() {
 
     # PostgreSQL
     if is_container_running "postgres"; then
-        local pg_user=$(grep "POSTGRES_USER" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2)
-        local pg_pass=$(grep "POSTGRES_PASSWORD" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2)
+        local pg_user=$(grep "POSTGRES_USER" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2-)
+        local pg_pass=$(grep "POSTGRES_PASSWORD" "$SCRIPT_DIR/services/postgres/.env" 2>/dev/null | cut -d'=' -f2-)
         echo -e "  ${GREEN}●${NC} PostgreSQL"
         echo -e "    Host:     localhost:5432 (external) / postgres:5432 (internal)"
         echo -e "    User:     ${pg_user:-postgres}"
@@ -260,8 +260,8 @@ show_credentials() {
 
     # Redis
     if is_container_running "redis-cache"; then
-        local redis_pass=$(grep "REDIS_CACHE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
-        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        local redis_pass=$(grep "REDIS_CACHE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2-)
+        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2-)
         echo -e "  ${GREEN}●${NC} Redis Cache"
         echo -e "    Host:     localhost:6379 (external) / redis-cache:6379 (internal)"
         echo -e "    Password: ${redis_pass:-<not set>}"
@@ -269,8 +269,8 @@ show_credentials() {
     fi
 
     if is_container_running "redis-queue"; then
-        local redis_pass=$(grep "REDIS_QUEUE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
-        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        local redis_pass=$(grep "REDIS_QUEUE_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2-)
+        [[ -z "$redis_pass" ]] && redis_pass=$(grep "REDIS_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2-)
         echo -e "  ${GREEN}●${NC} Redis Queue"
         echo -e "    Host:     localhost:6380 (external) / redis-queue:6379 (internal)"
         echo -e "    Password: ${redis_pass:-<not set>}"
@@ -279,8 +279,8 @@ show_credentials() {
 
     # MongoDB
     if is_container_running "mongo" || is_container_running "mongo-primary"; then
-        local mongo_user=$(grep "MONGO_INITDB_ROOT_USERNAME" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2)
-        local mongo_pass=$(grep "MONGO_INITDB_ROOT_PASSWORD" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2)
+        local mongo_user=$(grep "MONGO_INITDB_ROOT_USERNAME" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2-)
+        local mongo_pass=$(grep "MONGO_INITDB_ROOT_PASSWORD" "$SCRIPT_DIR/services/mongo/.env" 2>/dev/null | cut -d'=' -f2-)
         echo -e "  ${GREEN}●${NC} MongoDB"
         echo -e "    Host:     localhost:27017 (external) / mongo:27017 (internal)"
         echo -e "    User:     ${mongo_user:-admin}"
@@ -290,7 +290,7 @@ show_credentials() {
 
     # MySQL
     if is_container_running "mysql"; then
-        local mysql_pass=$(grep "MYSQL_ROOT_PASSWORD" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2)
+        local mysql_pass=$(grep "MYSQL_ROOT_PASSWORD" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2-)
         echo -e "  ${GREEN}●${NC} MySQL"
         echo -e "    Host:     localhost:3306 (external) / mysql:3306 (internal)"
         echo -e "    User:     root"
@@ -356,7 +356,7 @@ status_redis() {
         fi
 
         # Get Redis info
-        local redis_pass=$(grep "REDIS_${redis_type^^}_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2)
+        local redis_pass=$(grep "REDIS_${redis_type^^}_PASSWORD" "$SCRIPT_DIR/services/redis/.env" 2>/dev/null | cut -d'=' -f2-)
         local redis_info=$(docker exec "$container" redis-cli -a "$redis_pass" INFO 2>/dev/null | grep -E "used_memory_human|connected_clients|db0" || echo "")
         local mem=$(echo "$redis_info" | grep used_memory_human | cut -d: -f2 | tr -d '\r')
         local clients=$(echo "$redis_info" | grep connected_clients | cut -d: -f2 | tr -d '\r')
@@ -387,7 +387,7 @@ status_observability() {
 
     # Show Grafana credentials if running
     if is_container_running "grafana" && [[ "$QUICK_MODE" != "true" ]]; then
-        local grafana_user=$(grep "GRAFANA_ADMIN_USER" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2 || echo "admin")
+        local grafana_user=$(grep "GRAFANA_ADMIN_USER" "$SCRIPT_DIR/services/observability/.env" 2>/dev/null | cut -d'=' -f2- || echo "admin")
         echo -e "    ${YELLOW}Login:${NC} $grafana_user / <check .env>"
     fi
 }

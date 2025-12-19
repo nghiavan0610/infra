@@ -1129,7 +1129,7 @@ configure_backup() {
     $SED_CMD "s|^MONGO_PASSWORD=.*|MONGO_PASSWORD=${SHARED_MONGO_PASSWORD}|" .env
 
     if [[ -n "${INSTALLED_SERVICES[mysql]}" ]]; then
-        local MYSQL_PASS=$(grep "^MYSQL_ROOT_PASSWORD=" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2)
+        local MYSQL_PASS=$(grep "^MYSQL_ROOT_PASSWORD=" "$SCRIPT_DIR/services/mysql/.env" 2>/dev/null | cut -d'=' -f2-)
         $SED_CMD "s|^MYSQL_ROOT_PASSWORD=.*|MYSQL_ROOT_PASSWORD=${MYSQL_PASS}|" .env
     fi
 
@@ -1329,7 +1329,7 @@ show_summary() {
     echo ""
 
     [[ -n "${INSTALLED_SERVICES[observability]}" ]] && {
-        local GRAFANA_PASS=$(grep "GRAFANA_ADMIN_PASSWORD" tools/observability/.env 2>/dev/null | cut -d'=' -f2)
+        local GRAFANA_PASS=$(grep "GRAFANA_ADMIN_PASSWORD" tools/observability/.env 2>/dev/null | cut -d'=' -f2-)
         echo "  Grafana:      http://localhost:3000  (admin / $GRAFANA_PASS)"
         echo "  Prometheus:   http://localhost:9090"
     }

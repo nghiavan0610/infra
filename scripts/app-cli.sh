@@ -177,7 +177,7 @@ cmd_register() {
         log_step "Configuring Redis..."
         local redis_pass="${REDIS_PASSWORD:-}"
         if [[ -z "$redis_pass" ]] && [[ -f "$INFRA_ROOT/services/redis/.env" ]]; then
-            redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2)
+            redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2-)
         fi
         local redis_pass_encoded=$(url_encode "$redis_pass")
         app_config+="REDIS_URL=redis://:${redis_pass_encoded}@redis-cache:6379/0\n"
@@ -193,7 +193,7 @@ cmd_register() {
         log_step "Configuring S3 storage..."
         local s3_key="${GARAGE_ADMIN_TOKEN:-}"
         if [[ -z "$s3_key" ]] && [[ -f "$INFRA_ROOT/services/garage/.env" ]]; then
-            s3_key=$(grep "^GARAGE_ADMIN_TOKEN=" "$INFRA_ROOT/services/garage/.env" | cut -d'=' -f2)
+            s3_key=$(grep "^GARAGE_ADMIN_TOKEN=" "$INFRA_ROOT/services/garage/.env" | cut -d'=' -f2-)
         fi
         app_config+="S3_ENDPOINT=http://garage:3900\n"
         app_config+="S3_BUCKET=${app_name}-bucket\n"
@@ -1003,7 +1003,7 @@ cmd_init() {
         log_step "Adding Redis config..."
         local redis_pass="${REDIS_PASSWORD:-}"
         if [[ -z "$redis_pass" ]] && [[ -f "$INFRA_ROOT/services/redis/.env" ]]; then
-            redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2)
+            redis_pass=$(grep "^REDIS_PASSWORD=" "$INFRA_ROOT/services/redis/.env" | cut -d'=' -f2-)
         fi
         local redis_pass_encoded=$(url_encode "$redis_pass")
         env_content+="# Redis\n"
@@ -1017,7 +1017,7 @@ cmd_init() {
         log_step "Adding S3 config..."
         local s3_key="${GARAGE_ADMIN_TOKEN:-}"
         if [[ -z "$s3_key" ]] && [[ -f "$INFRA_ROOT/services/garage/.env" ]]; then
-            s3_key=$(grep "^GARAGE_ADMIN_TOKEN=" "$INFRA_ROOT/services/garage/.env" | cut -d'=' -f2)
+            s3_key=$(grep "^GARAGE_ADMIN_TOKEN=" "$INFRA_ROOT/services/garage/.env" | cut -d'=' -f2-)
         fi
         env_content+="# S3 Storage\n"
         env_content+="S3_ENDPOINT=http://garage:3900\n"
