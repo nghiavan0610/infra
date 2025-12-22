@@ -372,6 +372,45 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINew... alice@new-laptop
 
 ---
 
+## /opt/apps Directory Setup
+
+The `/opt/apps` directory is where CI/CD deploys applications. It's created by `docker-install.sh` with proper permissions.
+
+### If /opt/apps Doesn't Exist
+
+```bash
+# Create directory with proper permissions
+sudo mkdir -p /opt/apps
+sudo chown root:apps /opt/apps
+sudo chmod 2775 /opt/apps
+
+# Set ACL for group write on existing and future files
+sudo setfacl -R -m g::rwx /opt/apps
+sudo setfacl -R -d -m g::rwx /opt/apps
+```
+
+### If CI/CD Fails with Permission Denied
+
+```bash
+# Fix permissions on existing files
+sudo setfacl -R -m g::rwx /opt/apps
+sudo setfacl -R -d -m g::rwx /opt/apps
+
+# Verify
+getfacl /opt/apps
+```
+
+### Why ACL?
+
+| Method | Existing Files | Future Files |
+|--------|----------------|--------------|
+| `chmod g+w` | ✅ | ❌ (depends on umask) |
+| `setfacl` | ✅ | ✅ (default ACL) |
+
+ACL ensures all users in the `apps` group can always write, regardless of who creates the file.
+
+---
+
 ## Security Best Practices
 
 ### 1. Get SSH Keys from Team Members

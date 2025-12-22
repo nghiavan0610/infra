@@ -242,6 +242,16 @@ setup_apps_directory() {
     sudo chown root:apps /opt/apps
     sudo chmod 2775 /opt/apps  # setgid so new files inherit apps group
 
+    # Set ACL for group write on existing and future files
+    if command -v setfacl &>/dev/null; then
+        sudo setfacl -R -m g::rwx /opt/apps
+        sudo setfacl -R -d -m g::rwx /opt/apps
+        log_info "ACL configured: group write for existing and future files"
+    else
+        log_warn "setfacl not found. Install acl package for better permissions:"
+        log_warn "  sudo apt-get install acl  # or yum install acl"
+    fi
+
     log_info "Apps directory configured: /opt/apps (group: apps, mode: 2775)"
 }
 

@@ -210,13 +210,36 @@ docker system prune -af
   pull_policy = "if-not-present"
 ```
 
-### Permission denied
+### Permission denied (Docker)
 
 ```bash
 # Check Docker socket permissions
 ls -la /var/run/docker.sock
 
-# May need to add gitlab-runner to docker group
+# Add gitlab-runner to docker group
+sudo usermod -aG docker gitlab-runner
+sudo systemctl restart gitlab-runner
+```
+
+### Permission denied (/opt/apps)
+
+If CI/CD fails with `cp: cannot create regular file '/opt/apps/...': Permission denied`:
+
+```bash
+# 1. Verify gitlab-runner is in apps group
+groups gitlab-runner
+# Should show: gitlab-runner : gitlab-runner docker apps
+
+# 2. If not in apps group, add it
+sudo usermod -aG apps gitlab-runner
+sudo systemctl restart gitlab-runner
+
+# 3. Fix /opt/apps permissions with ACL
+sudo setfacl -R -m g::rwx /opt/apps
+sudo setfacl -R -d -m g::rwx /opt/apps
+
+# 4. Verify
+getfacl /opt/apps
 ```
 
 ## Unregister Runner

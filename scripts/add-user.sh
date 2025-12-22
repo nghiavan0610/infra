@@ -190,9 +190,10 @@ fi
 if [[ "$USER_EXISTS" == "false" ]]; then
     log_step "Creating user: $USERNAME"
     if [[ "$TUNNEL_ONLY" == "y" ]]; then
-        # Tunnel-only user gets nologin shell
-        useradd -m -s /usr/sbin/nologin "$USERNAME"
-        log_info "User $USERNAME created (tunnel-only, no shell)"
+        # Tunnel-only user gets bash shell (SSH restrictions handle security)
+        useradd -m -s /bin/bash "$USERNAME"
+        passwd -l "$USERNAME"  # Lock password (SSH key only)
+        log_info "User $USERNAME created (tunnel-only, password locked)"
     elif [[ "$CI_RUNNER" == "y" ]]; then
         # CI runner needs shell but no password (service account)
         useradd -m -s /bin/bash "$USERNAME"
@@ -206,8 +207,9 @@ if [[ "$USER_EXISTS" == "false" ]]; then
 else
     log_step "Updating existing user: $USERNAME"
     if [[ "$TUNNEL_ONLY" == "y" ]]; then
-        usermod -s /usr/sbin/nologin "$USERNAME"
-        log_info "Shell changed to nologin (tunnel-only)"
+        usermod -s /bin/bash "$USERNAME"
+        passwd -l "$USERNAME"  # Lock password (SSH key only)
+        log_info "Shell set to /bin/bash, password locked (tunnel-only)"
     elif [[ "$CI_RUNNER" == "y" ]]; then
         usermod -s /bin/bash "$USERNAME"
         log_info "Shell set to /bin/bash for CI runner"
@@ -335,7 +337,7 @@ Match User $USERNAME
     X11Forwarding no
     AllowAgentForwarding no
     PermitTTY no
-    ForceCommand /bin/false
+    ForceCommand echo 'Tunnel active. Press Ctrl+C to disconnect.' && sleep infinity
 EOF
         log_info "SSH tunnel-only restrictions configured"
 
