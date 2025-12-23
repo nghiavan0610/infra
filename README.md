@@ -44,6 +44,7 @@ infra/
 │   ├── vps-initial-setup.sh    # First-time VPS hardening
 │   ├── docker-install.sh       # Install Docker
 │   ├── add-user.sh             # Add users (Developer/DevOps/Infra Admin)
+│   ├── remove-user.sh          # Remove users (cleans up SSH config too)
 │   ├── audit-access.sh         # Audit who has access to what
 │   ├── reset-password.sh       # Reset admin password (requires sudo)
 │   ├── production-checklist.sh # Verify production readiness
@@ -627,6 +628,22 @@ sudo bash scripts/add-user.sh
 - Start/stop/remove ANY container
 - Read secrets from running containers
 - Access all databases directly
+
+### Remove Users
+
+Remove team members safely with automatic cleanup:
+
+```bash
+sudo bash scripts/remove-user.sh
+```
+
+The script will:
+- List all users on the system
+- Confirm before deleting
+- Kill any running processes for the user
+- Remove SSH tunnel restrictions (for tunnel-only users)
+- Clean up group memberships (sudo, docker, apps)
+- Delete user account and home directory
 
 ### Audit Access
 

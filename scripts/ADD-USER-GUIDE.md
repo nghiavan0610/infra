@@ -1,10 +1,10 @@
-# Add User Guide - Dev Team Management
+# User Management Guide - Dev Team Management
 
-Quick guide for adding users to your VPS, including your first Infra Admin.
+Quick guide for adding and removing users on your VPS, including your first Infra Admin.
 
 ---
 
-## When to Use This Script
+## When to Use These Scripts
 
 Use `add-user.sh` to:
 - ✅ Create your first Infra Admin (after Docker is installed)
@@ -15,10 +15,17 @@ Use `add-user.sh` to:
 - ✅ Set up SSH key authentication
 - ✅ Create tunnel-only users for dev partners
 
+Use `remove-user.sh` to:
+- ✅ Remove team members safely
+- ✅ Clean up SSH tunnel restrictions automatically
+- ✅ Remove from all groups (sudo, docker, apps)
+- ✅ Delete user account and home directory
+
 **Typical Flow:**
 1. `vps-initial-setup.sh` → Hardens system (SSH, firewall, fail2ban)
 2. `docker-install.sh` → Installs Docker (current user gets docker access)
 3. `add-user.sh` → Create Infra Admin or add team members
+4. `remove-user.sh` → Remove users when offboarding
 
 ---
 
@@ -461,12 +468,29 @@ ls -la /home/*/.ssh/authorized_keys
 
 ### Remove a User
 
+Use the `remove-user.sh` script for safe user removal with automatic cleanup:
+
+```bash
+sudo bash scripts/remove-user.sh
+```
+
+The script will:
+- List all users on the system
+- Show user info and ask for confirmation
+- Kill any running processes for the user
+- Remove SSH tunnel restrictions (for tunnel-only users)
+- Clean up group memberships (sudo, docker, apps)
+- Delete user account and home directory
+- Clean up cron jobs
+
+**Manual method (not recommended):**
+
 ```bash
 # Remove user and their home directory
 sudo userdel -r username
 
-# Or keep home directory
-sudo userdel username
+# For tunnel-only users, also remove SSH Match block from /etc/ssh/sshd_config
+# and reload SSH: sudo systemctl reload sshd
 ```
 
 ### Disable User (Keep Account)
@@ -578,32 +602,39 @@ cat ~/.ssh/id_ed25519.pub
 ### 2. Offboarding Checklist
 
 ```bash
+# Option 1: Use remove-user.sh (recommended)
+sudo bash scripts/remove-user.sh
+# Follow prompts to remove user safely
+
+# Option 2: Manual (if you need to disable first, then remove later)
 # Disable user immediately
 sudo passwd -l username
 sudo mv /home/username/.ssh/authorized_keys /home/username/.ssh/authorized_keys.disabled
 
-# After handover period, remove user
-sudo userdel -r username
+# After handover period, remove user with the script
+sudo bash scripts/remove-user.sh
 
 # Audit other access (databases, services, etc.)
 ```
 
 ---
 
-## Comparison: add-user.sh vs vps-initial-setup.sh
+## Comparison: User Scripts vs System Scripts
 
-| Task | add-user.sh | vps-initial-setup.sh |
-|------|-------------|----------------------|
-| **Purpose** | User management | System hardening |
-| **Run frequency** | Many times | Once |
-| **Creates users** | ✅ (with full permissions) | ❌ |
-| **SSH hardening** | ❌ | ✅ |
-| **Configures firewall** | ❌ | ✅ |
-| **Configures fail2ban** | ❌ | ✅ |
-| **Grants Docker access** | ✅ (Infra Admin type) | ❌ |
-| **Safe to run repeatedly** | ✅ | ✅ |
+| Task | add-user.sh | remove-user.sh | vps-initial-setup.sh |
+|------|-------------|----------------|----------------------|
+| **Purpose** | Add users | Remove users | System hardening |
+| **Run frequency** | Many times | As needed | Once |
+| **Creates users** | ✅ | ❌ | ❌ |
+| **Removes users** | ❌ | ✅ | ❌ |
+| **Cleans SSH config** | ❌ | ✅ (tunnel users) | ❌ |
+| **SSH hardening** | ❌ | ❌ | ✅ |
+| **Configures firewall** | ❌ | ❌ | ✅ |
+| **Configures fail2ban** | ❌ | ❌ | ✅ |
+| **Grants Docker access** | ✅ (Infra Admin) | ❌ | ❌ |
+| **Safe to run repeatedly** | ✅ | ✅ | ✅ |
 
-**Note:** `vps-initial-setup.sh` focuses only on system hardening. All user creation (including your first Infra Admin) is done via `add-user.sh`.
+**Note:** `vps-initial-setup.sh` focuses only on system hardening. All user management (add/remove) is done via `add-user.sh` and `remove-user.sh`.
 
 ---
 
@@ -649,5 +680,5 @@ After adding users, consider:
 
 ---
 
-**Last Updated:** 2025-12-18
-**Version:** 2.0.0
+**Last Updated:** 2025-12-23
+**Version:** 2.1.0

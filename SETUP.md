@@ -409,9 +409,26 @@ redis-cli -h localhost -p 6379
 - Access files on the server
 - Control Docker containers
 
-### 6.5 Remove Docker Access from User
+### 6.5 Remove a User
 
-If you need to downgrade a user's access:
+Remove team members safely with automatic cleanup:
+
+```bash
+sudo bash scripts/remove-user.sh
+```
+
+The script will:
+- List all users on the system
+- Show user info and ask for confirmation
+- Kill any running processes for the user
+- Remove SSH tunnel restrictions (for tunnel-only users)
+- Clean up group memberships (sudo, docker, apps)
+- Delete user account and home directory
+- Clean up cron jobs
+
+### 6.6 Remove Docker Access from User
+
+If you need to downgrade a user's access (without removing them):
 
 ```bash
 # Remove from docker group
