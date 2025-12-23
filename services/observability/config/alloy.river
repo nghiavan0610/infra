@@ -333,10 +333,12 @@ discovery.relabel "application_metrics" {
     action        = "keep"
   }
 
-  // Set the target address using container IP and prometheus.port label
+  // Set the target address using container name and prometheus.port label
+  // Using container name (works when on same Docker network)
   rule {
-    source_labels = ["__meta_docker_container_network_ip", "__meta_docker_container_label_prometheus_port"]
-    separator     = ":"
+    source_labels = ["__meta_docker_container_name", "__meta_docker_container_label_prometheus_port"]
+    regex         = "/(.+);(.+)"
+    replacement   = "${1}:${2}"
     target_label  = "__address__"
   }
 
