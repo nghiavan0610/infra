@@ -289,6 +289,119 @@ prometheus.scrape "alloy_self" {
   job_name = "alloy"
 }
 
+// =============================================================================
+// APPLICATION METRICS - Auto-Discovery via Docker Labels
+// =============================================================================
+// Automatically discovers and scrapes metrics from containers with labels:
+//   - prometheus.scrape=true     (required - enables scraping)
+//   - prometheus.port=4100       (required - metrics port)
+//   - prometheus.path=/metrics   (optional - defaults to /metrics)
+//   - prometheus.app=myapp       (optional - app name for grouping)
+//
+// Example docker-compose.yml:
+//   services:
+//     api:
+//       labels:
+//         - "prometheus.scrape=true"
+//         - "prometheus.port=4100"
+//         - "prometheus.app=hirestack-api"
+//     worker-heavy:
+//       labels:
+//         - "prometheus.scrape=true"
+//         - "prometheus.port=4201"
+//         - "prometheus.app=hirestack-worker-heavy"
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Docker Discovery for Application Metrics
+// -----------------------------------------------------------------------------
+discovery.docker "applications" {
+  host = "unix:///var/run/docker.sock"
+  refresh_interval = "15s"
+}
+
+// -----------------------------------------------------------------------------
+// Relabel to filter and configure application metrics targets
+// -----------------------------------------------------------------------------
+discovery.relabel "application_metrics" {
+  targets = discovery.docker.applications.targets
+
+  // Only keep containers with prometheus.scrape=true label
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_scrape"]
+    regex         = "true"
+    action        = "keep"
+  }
+
+  // Set the target address using container IP and prometheus.port label
+  rule {
+    source_labels = ["__meta_docker_container_network_ip", "__meta_docker_container_label_prometheus_port"]
+    separator     = ":"
+    target_label  = "__address__"
+  }
+
+  // Set metrics path from label (default /metrics)
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_path"]
+    regex         = "(.+)"
+    target_label  = "__metrics_path__"
+  }
+
+  // Add app label from prometheus.app or compose service name
+  rule {
+    source_labels = ["__meta_docker_container_label_prometheus_app"]
+    regex         = "(.+)"
+    target_label  = "app"
+  }
+  rule {
+    source_labels = ["app", "__meta_docker_container_label_com_docker_compose_service"]
+    regex         = ";(.+)"
+    target_label  = "app"
+  }
+
+  // Add compose project label
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "compose_project"
+  }
+
+  // Add compose service label
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    target_label  = "compose_service"
+  }
+
+  // Add container name
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // Add instance label (container name for uniqueness when scaling)
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "instance"
+  }
+
+  // Set job label
+  rule {
+    replacement  = "applications"
+    target_label = "job"
+  }
+}
+
+// -----------------------------------------------------------------------------
+// Scrape Application Metrics
+// -----------------------------------------------------------------------------
+prometheus.scrape "applications" {
+  targets         = discovery.relabel.application_metrics.output
+  forward_to      = [prometheus.remote_write.default.receiver]
+  scrape_interval = "15s"
+  scrape_timeout  = "10s"
+}
+
 // -----------------------------------------------------------------------------
 // Remote Write to Prometheus
 // -----------------------------------------------------------------------------
