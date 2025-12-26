@@ -464,6 +464,7 @@ The key insight is that confidence detection shouldn't be a separate classifier 
 So about streaming — you know how ChatGPT shows text appearing word by word? We do something similar but with a twist. Token-by-token streaming creates a lot of Socket.IO events. When you have thousands of concurrent chats, that's a lot of overhead — network packets, event parsing, state updates on the client.
 
 What we do instead is **paragraph-based buffering**. Here's the implementation:
+Buffer tokens until paragraph complete, then emit
 
 ```python
 async def stream_with_buffering(response_stream):

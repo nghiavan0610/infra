@@ -29,7 +29,7 @@
 
 ## "Tell me about your recent project"
 
-> "So I was brought in as a technical consultant to audit an AI-powered interview platform called Flowmingo. The system handles video interviews with real-time audio streaming - candidates speak, we stream audio to AI, process with Gemini, and stream back responses. Processing thousands of candidates daily.
+> "At Atenyx, I worked on AI-powered products. One of my lastest projects was being outsourced as a technical consultant to Flowmingo - an AI interview platform.The system handles video interviews with real-time audio streaming - candidates speak, we stream audio to AI, process with Gemini, and stream back responses. Processing thousands of candidates daily.
 >
 > The situation was pretty bad when I joined. Daily crashes, candidates stuck in interviews for hours, duplicate processing wasting API credits. Customer complaints coming in constantly. The team basically discovered outages when customers complained - there was no monitoring, no alerting, nothing.
 >
